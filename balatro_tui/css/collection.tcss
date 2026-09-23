@@ -1,0 +1,27 @@
+#collection1 {
+    height: 40%;
+    align: center middle;
+}
+
+#collection1 Button {
+    margin: 1;
+    border: solid rgb(83, 83, 83);
+}
+
+#collection2 {
+    height: 40%;
+    align: center middle;
+}
+
+#collection2 Button {
+    margin: 1;
+    border: solid rgb(83, 83, 83);
+}
+
+Header, Footer {
+    background: #191a1c;
+}
+
+CollectionScreen {
+    background: #1e1f22;
+}

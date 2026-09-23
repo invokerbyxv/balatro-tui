@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "name": "textual-scaffolder",
+  "owner": "a5c-ai",
+  "repo": "babysitter",
+  "path": "library/specializations/cli-mcp-development/skills/textual-scaffolder",
+  "branch": "main",
+  "sha": "55fa3a14268ab55d541e454d61333a8b0a2702a3",
+  "source": "manual"
+}
