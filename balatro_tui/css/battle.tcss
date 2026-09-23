@@ -1,0 +1,49 @@
+BattleArea {
+    border: rgb(83, 83, 83);
+}
+
+#played_area {
+    height: 1fr;
+    border-bottom: heavy rgb(83, 83, 83);
+}
+
+#played_area Static {
+    width: auto;
+    border-right: rgb(83, 83, 83);
+    text-align: center;
+}
+
+HandHorizontalScroll {
+    width: 90%;
+    scrollbar-visibility: hidden;
+    border: rgb(83, 83, 83);
+}
+
+HandHorizontalScroll Static {
+    width: 10;
+    height: 3;
+    border-right: rgb(83, 83, 83);
+    text-align: center;
+    content-align: center middle;
+}
+
+ActionBar {
+    height: 3;
+    align-horizontal: center;
+}
+
+ActionBar Center {
+    width: 25;
+}
+
+#sort_group {
+    width: 24;
+}
+
+#sort_group Static {
+    text-align: center;
+}
+
+#sort_buttons {
+    align-horizontal: center;
+}

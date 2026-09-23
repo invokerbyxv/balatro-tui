@@ -1,0 +1,27 @@
+BoostersArea {
+    align: center middle;
+}
+
+PackCards {
+    height: auto;
+    margin-bottom: 2;
+}
+
+PackCards FocusableStatic {
+    width: 16;
+    height: 3;
+    text-align: center;
+    border: rgb(83, 83, 83);
+    margin: 0 1;
+}
+
+PackBar {
+    height: auto;
+    align-vertical: middle;
+}
+
+#pack_name {
+    width: auto;
+    border: rgb(83, 83, 83);
+    padding: 0 2;
+}

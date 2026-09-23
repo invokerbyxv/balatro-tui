@@ -1,0 +1,37 @@
+SettlementPanel {
+    width: 90%;
+    padding: 1 2;
+}
+
+#cash_out {
+    width: 100%;
+    background: rgb(83, 83, 83);
+    color: white;
+    text-align: center;
+}
+
+#settlement_row_1, #settlement_row_2 {
+    height: 1;
+    margin-top: 1;
+}
+
+#blind_result, #hands_left {
+    width: 70%;
+}
+
+#blind_reward, #hands_money {
+    width: 30%;
+    text-align: right;
+    color: rgb(255, 200, 0);
+}
+
+#settlement_divider {
+    width: 100%;
+    text-align: center;
+}
+
+#collect {
+    width: 100%;
+    margin-top: 1;
+    text-align: center;
+}

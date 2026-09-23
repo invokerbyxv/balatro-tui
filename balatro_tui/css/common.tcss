@@ -1,0 +1,132 @@
+LeftContainer {
+    width: 25%;
+    border: heavy rgb(83, 83, 83);
+}
+
+RightContainer {
+    width: 75%;
+    border: heavy rgb(83, 83, 83);
+}
+
+#chips {
+    width: 50%;
+    text-align: right;
+    border-right: rgb(83, 83, 83);
+}
+
+#mult {
+    width: 50%;
+    text-align: left;
+}
+
+#level, #require, #rewards, #score {
+    width: 50%;
+    text-align: center;
+}
+
+#level {
+    border-right: rgb(83, 83, 83);
+}
+
+#rewards {
+    border-right: rgb(83, 83, 83);
+}
+
+#left_content_tb_1 .datatable--header {
+    background: rgb(83, 83, 83);
+    color: white;
+    text-align: center;
+}
+
+Tooltip {
+    background: rgb(83, 83, 83);
+    color: white;
+}
+
+#info {
+    width: 50%;
+    height: 1;
+    background: 10%;
+    border-left: vkey rgb(83, 83, 83);
+    border-right: vkey rgb(83, 83, 83);
+    text-align: center;
+}
+
+#card_deck {
+    width: 50%;
+    text-align: center;
+}
+
+PreparationButton:focus, FocusableStatic:focus {
+    background: rgb(83, 83, 83);
+    color: white;
+}
+
+PreparationButton {
+    height: 1;
+    min-width: 1;
+    padding: 0 1;
+    border: none;
+}
+
+JokerHorizontalScroll {
+    width: 60%;
+    scrollbar-visibility: hidden;
+}
+
+JokerHorizontalScroll:hover,
+ConsumableHorizontalScroll:hover {
+    background: rgb(83, 83, 83) 15%;
+}
+
+JokerHorizontalScroll:focus,
+ConsumableHorizontalScroll:focus {
+    background: rgb(83, 83, 83) 25%;
+}
+
+JokerHorizontalScroll Static {
+    width: auto;
+    border-right: rgb(83, 83, 83);
+}
+
+#joker_count {
+    width: 10%;
+    text-align: center;
+    border-left: rgb(83, 83, 83);
+    border-right: rgb(83, 83, 83);
+}
+
+ConsumableHorizontalScroll {
+    width: 20%;
+    scrollbar-visibility: hidden;
+}
+
+ConsumableHorizontalScroll Static {
+    width: auto;
+    border-right: rgb(83, 83, 83);
+}
+
+#consumable_count {
+    width: 10%;
+    text-align: center;
+    border-left: rgb(83, 83, 83);
+    border-right: rgb(83, 83, 83);
+}
+
+RightRow1 {
+    height: 25%;
+}
+
+Tag {
+    width: 10%;
+    scrollbar-visibility: hidden;
+    border: rgb(83, 83, 83);
+}
+
+Tag:hover {
+    background: rgb(83, 83, 83) 15%;
+}
+
+Tag:focus {
+    background: rgb(83, 83, 83) 25%;
+}
