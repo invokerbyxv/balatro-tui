@@ -1,4 +1,4 @@
-"""解析 balatro_lua_source_code/game.lua 中的资源定义(P_CENTERS/P_TAGS/P_BLINDS 等)。
+"""解析 balatro_source_code/game.lua 中的资源定义(P_CENTERS/P_TAGS/P_BLINDS 等)。
 
 只提取静态数据:名称、价格、稀有度、config(即描述文本里 #1# #2# 的数值来源)。
 """
@@ -9,7 +9,7 @@ from pathlib import Path
 
 GAME_LUA = (
     Path(__file__).resolve().parent.parent.parent
-    / "balatro_lua_source_code"
+    / "balatro_source_code"
     / "game.lua"
 )
 
