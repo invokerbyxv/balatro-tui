@@ -23,6 +23,16 @@ RightContainer {
     width: 50%;
 }
 
+Tooltip {
+    background: rgb(83, 83, 83);
+    color: white;
+}
+
+#left_content_tb_1 .datatable--header {
+    background: rgb(83, 83, 83);
+    color: white;
+}
+
 #level {
     border-right: rgb(83, 83, 83);
 }
