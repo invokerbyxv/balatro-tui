@@ -81,11 +81,19 @@ class LeftContent(VerticalGroup):
             id="calculation"
         )
         tb_1 = DataTable(id="left_content_tb_1",)
-        tb_1.add_columns("出牌", "弃牌", "底注", "回合", "钱")
+        tb_1.add_column("出牌", key="plays")
+        tb_1.add_column("弃牌", key="discards")
+        tb_1.add_column("底注", key="ante")
+        tb_1.add_column("回合", key="round")
+        tb_1.add_column("钱", key="money")
         tb_1.add_row(0, 0, "8/8", 29, "$190")
         tb_1.cursor_type = "none"
         yield tb_1
-        yield Center(PreparationButton("游戏信息", id="info"))
+
+        yield Horizontal(
+            PreparationButton("游戏信息", id="info"),
+            Static("卡组: [52/52]", id="card_deck")
+        )
 
 class LeftContainer(Container):
 

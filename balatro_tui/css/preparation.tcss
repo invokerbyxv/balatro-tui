@@ -21,6 +21,7 @@ RightContainer {
 
 #level, #require, #rewards, #score {
     width: 50%;
+    text-align: center;
 }
 
 Tooltip {
@@ -44,10 +45,21 @@ Tooltip {
 #info {
     width: 50%;
     height: 1;
+    background: 10%;
     border-left: vkey rgb(83, 83, 83);
     border-right: vkey rgb(83, 83, 83);
     text-align: center;
-    align: center middle;
+}
+
+#left_content_tb_1 .datatable--header {
+    background: rgb(83, 83, 83);
+    color: white;
+    text-align: center;
+}
+
+#card_deck {
+    width: 50%;
+    text-align: center;
 }
 
 PreparationButton:focus, FocusableStatic:focus {
