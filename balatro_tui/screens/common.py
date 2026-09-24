@@ -97,7 +97,15 @@ class LeftContent(VerticalGroup):
         tb_1.add_column("底注", key="ante")
         tb_1.add_column("回合", key="round")
         tb_1.add_column("钱", key="money")
-        tb_1.add_row(0, 0, "1/8", 1, "$4")
+        # 起始行取当前对局真实数值(如黄牌起始 $14),避免首帧残留硬编码 $4
+        st = _state(self.screen)
+        tb_1.add_row(
+            st.hands_left if st else 0,
+            st.discards_left if st else 0,
+            f"1/{st.ante if st else 8}",
+            1,
+            f"${st.dollars if st else 4}",
+        )
         tb_1.cursor_type = "none"
         yield tb_1
 

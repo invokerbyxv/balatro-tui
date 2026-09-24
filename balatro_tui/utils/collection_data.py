@@ -249,6 +249,36 @@ def voucher_vars(cfg: dict) -> list:
     return [] if e is None else [e]
 
 
+def consume_set_of(key: str) -> str:
+    """按 key 判断它属于 Tarot / Planet / Spectral 哪个 set。"""
+    defs = load_definitions()
+    for set_name in ("Tarot", "Planet", "Spectral"):
+        if (defs.get(set_name) or {}).get(key):
+            return set_name
+    return ""
+
+
+def consumable_item(set_name: str, key: str) -> dict:
+    """构造一张消耗品的展示数据(供起始消耗品/商店/持有条使用)。"""
+    defs = load_definitions()
+    c = (defs.get(set_name) or {}).get(key) or {}
+    cfg = get_config(c)
+    name = loc_name(set_name, key) or c.get("name") or key
+    if set_name == "Tarot":
+        vars_ = tarot_vars(key, cfg)
+    elif set_name == "Planet":
+        vars_ = planet_vars(cfg, defs.get("_hands") or {})
+    else:
+        vars_ = spectral_vars(key, cfg)
+    return {
+        "key": key,
+        "name": name,
+        "label": f"[{name}]",
+        "desc": _desc(set_name, key, vars_) or name,
+        "cost": c.get("cost") or 1,
+    }
+
+
 def back_vars(key: str, cfg: dict) -> list:
     table = {
         "b_red": [cfg.get("discards")],

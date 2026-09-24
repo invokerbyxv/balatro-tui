@@ -23,23 +23,34 @@ DEFAULT_PARAMS = {
     "ante_scaling": 1,
 }
 
-# 牌组 def 对起始参数的叠加(参照 P_BACKS)
-_BACK_ADJUST = {
+# 牌组 def,依 balatro_source_code 的 game.lua P_CENTERS.b_* config 与
+# back.lua:apply_to_run 口径(即每个卡组的真实效果)。
+_BACK_CONFIGS = {
     "b_red": {"discards": 1},
     "b_blue": {"hands": 1},
     "b_yellow": {"dollars": 10},
-    "b_green": {"no_interest": True, "extra_hand_bonus": 2},
-    "b_black": {"hands": -1, "joker_slots": 1},
-    "b_magic": {},
-    "b_nebula": {},
-    "b_ghost": {},
+    "b_green": {"extra_hand_bonus": 2, "extra_discard_bonus": 1, "no_interest": True},
+    "b_black": {"hands": -1, "joker_slot": 1},
+    "b_magic": {"voucher": "v_crystal_ball", "consumables": ["c_fool", "c_fool"]},
+    "b_nebula": {"voucher": "v_telescope", "consumable_slot": -1},
+    "b_ghost": {"spectral_rate": 2, "consumables": ["c_hex"]},
     "b_abandoned": {"remove_faces": True},
     "b_checkered": {"checkered": True},
-    "b_zodiac": {},
-    "b_painted": {"hand_size": 2, "joker_slots": -1},
+    "b_zodiac": {"vouchers": ["v_tarot_merchant", "v_planet_merchant", "v_overstock_norm"]},
+    "b_painted": {"hand_size": 2, "joker_slot": -1},
     "b_anaglyph": {},
     "b_plasma": {"ante_scaling": 2},
-    "b_erratic": {},
+    "b_erratic": {"randomize_rank_suit": True},
+}
+
+# 数值参数名 -> 起始参数键(部分 def 键名与参数名不同)
+_param_map = {
+    "hands": "hands",
+    "discards": "discards",
+    "dollars": "dollars",
+    "hand_size": "hand_size",
+    "joker_slot": "joker_slots",
+    "consumable_slot": "consumables",
 }
 
 
@@ -63,6 +74,9 @@ class GameState:
         self.interest_amount = 1
         self.inflation = 0
         self.no_interest = False
+        self.money_per_hand = 0        # 绿牌:每手奖励(extra_hand_bonus)
+        self.money_per_discard = 0     # 绿牌:每弃牌奖励(extra_discard_bonus)
+        self.spectral_rate = None      # 幽灵:幻灵牌出现率(当前仅记录,供后续商店使用)
         self.reroll_cost = self.params["reroll_cost"]
 
         # 底注 / 盲注
@@ -116,21 +130,47 @@ class GameState:
 
     def set_deck(self, deck_key: str):
         self.deck_key = deck_key
-        self.back_mods = dict(_BACK_ADJUST.get(deck_key, {}))
+        self.back_mods = dict(_BACK_CONFIGS.get(deck_key, {}))
         self.params = dict(DEFAULT_PARAMS)
+        # 数值类:累加进起始参数(discards/hands/dollars/hand_size/joker_slot/consumable_slot)
         for k, v in self.back_mods.items():
-            if k in ("no_interest", "checkered", "remove_faces"):
-                continue
-            if k in self.params:
-                self.params[k] += v
-        self.ante_scaling = self.params["ante_scaling"]
-        single = self.back_mods.get("ante_scaling")
-        if isinstance(single, int) and single:
-            self.ante_scaling = single
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and k in _param_map:
+                self.params[_param_map[k]] += v
+        # plasma:直接赋值 ante_scaling
+        self.ante_scaling = self.back_mods.get("ante_scaling", self.params["ante_scaling"])
+        # 绿牌:无利息 + 每手/弃牌奖金
+        self.no_interest = bool(self.back_mods.get("no_interest"))
+        self.money_per_hand = self.back_mods.get("extra_hand_bonus", 0)
+        self.money_per_discard = self.back_mods.get("extra_discard_bonus", 0)
+        # 幽灵:幻灵出现率起点
+        self.spectral_rate = self.back_mods.get("spectral_rate")
         self.create_deck(self.deck_key)
         # 初始金钱=起始参数
         self.dollars = self.params["dollars"]
         self.reset_round()
+        # 首发优惠券/消耗品(魔术/星云/幽灵/占星)
+        self._apply_starting_boons()
+
+    def _apply_starting_boons(self):
+        """按卡组 config 填入手局你实际持有的优惠券与消耗品。"""
+        for v in self.back_mods.get("vouchers") or []:
+            self._give_voucher(v)
+        v = self.back_mods.get("voucher")
+        if v:
+            self._give_voucher(v)
+        for ck in self.back_mods.get("consumables") or []:
+            self._give_consumable(ck)
+
+    def _give_voucher(self, key: str) -> None:
+        if key and key not in self.vouchers:
+            self.vouchers.append(key)
+
+    def _give_consumable(self, key: str) -> None:
+        from ..utils.collection_data import consume_set_of, consumable_item
+        set_name = consume_set_of(key)
+        bucket = {"Tarot": "tarots", "Planet": "planets", "Spectral": "spectrals"}.get(set_name)
+        if bucket:
+            self.consumables.setdefault(bucket, []).append(consumable_item(set_name, key))
 
     def create_deck(self, deck_type="standard"):
         from .card import Card
@@ -142,6 +182,9 @@ class GameState:
             cards = [c for c in cards if c.suit in ("Spades", "Hearts")]
         if self.back_mods.get("remove_faces"):
             cards = [c for c in cards if c.rank not in ("Jack", "Queen", "King")]
+        if self.back_mods.get("randomize_rank_suit"):
+            # 芜杂:52 张随机花色/点数(随机牌堆)
+            cards = [Card(random.choice(suits), random.choice(ranks)) for _ in range(52)]
         random.shuffle(cards)
         self.deck = cards
 
@@ -220,6 +263,12 @@ class GameState:
             return None
         level = self.level_of(hand_key)
         calc = ScoreCalculator(hand_key, scoring, level, self.jokers).calculate()
+        if self.deck_key == "b_plasma":
+            # 等离子:最终结算把筹码与倍率拉平为二者均值
+            half = (calc["chips"] + calc["mult"]) // 2
+            calc["chips"] = half
+            calc["mult"] = half
+            calc["score"] = half * half
         self.score_chips += calc["score"]
         self.hands_left -= 1
         self.hands_played += 1
@@ -230,6 +279,10 @@ class GameState:
                 self.hand.remove(c)
         self.draw_hand()
         self.won_blind = self.score_chips >= (self.current_blind.target if self.current_blind else 1)
+        # 拓碑:击败 boss 盲注时获得一个双倍标签(back.lua trigger_effect)
+        if (self.deck_key == "b_anaglyph" and self.won_blind
+                and self.current_blind and self.current_blind.is_boss):
+            self.add_tag("tag_double")
         # 记录该牌型使用次数
         self.hand_levels.setdefault(hand_key, {}).setdefault("level", 1)
         return calc
@@ -260,15 +313,19 @@ class GameState:
         """结算金额:盲注奖励 + 剩余出牌×1 + 利息。"""
         blind_reward = self.current_blind.dollars if self.current_blind and self.won_blind else 0
         hands_money = max(self.hands_left, 0) * 1
-        dollars = 0 if self.no_interest else min(self.dollars // 5,
-                                                 self.interest_cap // 5) * self.interest_amount
+        bonus_hand = self.money_per_hand * self.hands_played      # 绿牌:每手 +2
+        bonus_discard = self.money_per_discard * self.discards_used  # 绿牌:每弃牌 +1
         if self.no_interest:
             dollars = 0
+        else:
+            dollars = min(self.dollars // 5, self.interest_cap // 5) * self.interest_amount
         return {
             "blind_reward": blind_reward,
             "hands_money": hands_money,
+            "hand_bonus": bonus_hand,
+            "discard_bonus": bonus_discard,
             "interest": dollars,
-            "total": blind_reward + hands_money + dollars,
+            "total": blind_reward + hands_money + bonus_hand + bonus_discard + dollars,
         }
 
     def collect_money(self) -> dict:
