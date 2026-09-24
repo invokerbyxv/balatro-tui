@@ -112,7 +112,7 @@ class LeftContent(VerticalGroup):
             self.app.push_screen(GameInfoScreen(_state(self.screen)))
             event.stop()
 
-    def refresh_run(self, state=None) -> None:
+    async def refresh_run(self, state=None) -> None:
         state = state or _state(self.screen)
         if state is None:
             return
@@ -172,13 +172,14 @@ class JokerHorizontalScroll(
             item.tooltip = joker.get("desc") or "小丑牌"
             yield item
 
-    def _rebuild(self) -> None:
-        self.remove_children()
+    async def _rebuild(self) -> None:
+        if self.children:
+            await self.remove_children()
         for w in self._children():
-            self.mount(w)
+            await self.mount(w)
 
-    def refresh_run(self, state=None) -> None:
-        self._rebuild()
+    async def refresh_run(self, state=None) -> None:
+        await self._rebuild()
 
 
 class ConsumableHorizontalScroll(
@@ -208,13 +209,14 @@ class ConsumableHorizontalScroll(
                 fs.tooltip = item.get("desc") or "消耗品"
             yield fs
 
-    def _rebuild(self) -> None:
-        self.remove_children()
+    async def _rebuild(self) -> None:
+        if self.children:
+            await self.remove_children()
         for w in self._children():
-            self.mount(w)
+            await self.mount(w)
 
-    def refresh_run(self, state=None) -> None:
-        self._rebuild()
+    async def refresh_run(self, state=None) -> None:
+        await self._rebuild()
 
 
 class RightRow1Sub(Horizontal):
@@ -234,13 +236,38 @@ class RightRow1(Container):
 
 class Tag(ScrollInteraction, FocusNavigationScroll, VerticalScroll):
 
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._n = 0
+
     def compose(self) -> ComposeResult:
         self.can_focus = True
         self.can_focus_children = True
-        for index, label in enumerate((
-            "[负片]", "[负片]", "[负片]", "[负片]",
-        ), start=1):
-            yield FocusableStatic(label, id=f"tag_{index}")
+        yield from self._children()
+
+    def _children(self):
+        """渲染当局待用标签(state.tags);队列为空时给出占位。"""
+        state = _state(self.screen)
+        tags = getattr(state, "tags", None)
+        if not tags:
+            yield FocusableStatic("[无标签]", id="tag_empty")
+            return
+        from ..utils.collection_data import tag_item
+        for key in tags:
+            self._n += 1
+            item = tag_item(key)
+            fs = FocusableStatic(item["label"], id=f"tag_{self._n}")
+            fs.tooltip = item["desc"]
+            yield fs
+
+    async def _rebuild(self) -> None:
+        if self.children:
+            await self.remove_children()
+        for w in self._children():
+            await self.mount(w)
+
+    async def refresh_run(self, state=None) -> None:
+        await self._rebuild()
 
 
 class RightContainer(Container):
@@ -274,16 +301,17 @@ class GameScreen(Screen):
     def action_go_back(self):
         self.app.pop_screen()
 
-    def refresh_run_ui(self) -> None:
+    async def refresh_run_ui(self) -> None:
         """刷新左侧信息栏与小丑/消耗品条。"""
         for cls, method in (
             (LeftContent, "refresh_run"),
             (JokerHorizontalScroll, "refresh_run"),
             (ConsumableHorizontalScroll, "refresh_run"),
+            (Tag, "refresh_run"),
         ):
             for widget in self.query(cls):
                 try:
-                    getattr(widget, method)()
+                    await getattr(widget, method)()
                 except NoMatches:
                     pass
         self._refresh_counts()
@@ -319,8 +347,8 @@ class GameScreen(Screen):
         except NoMatches:
             pass
 
-    def on_mount(self) -> None:
-        self.refresh_run_ui()
+    async def on_mount(self) -> None:
+        await self.refresh_run_ui()
         try:
             self.query_one(f"#{self.initial_focus_id}", PreparationButton).focus()
         except NoMatches:

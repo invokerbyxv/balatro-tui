@@ -94,7 +94,6 @@ class ShopPanel(Horizontal):
             id="shop_actions"
         )
         yield ShopGoods()
-        yield Tag()
 
 
 class RightRow2Sub(Horizontal):
@@ -120,10 +119,10 @@ class ShopScreen(GameScreen):
         yield GameLayout(RightRow1(), RightRow2Sub())
         yield Footer()
 
-    def on_mount(self) -> None:
+    async def on_mount(self) -> None:
         if not getattr(self.game_state, "shop_jokers", None):
             self.game_state.generate_shop()
-        self.refresh_run_ui()
+        await self.refresh_run_ui()
         self.query_one(ShopGoods)._rebuild()
         self._sync_reroll_label()
         try:
@@ -137,20 +136,20 @@ class ShopScreen(GameScreen):
         except Exception:
             pass
 
-    def buy_joker(self, index: int) -> None:
+    async def buy_joker(self, index: int) -> None:
         if self.game_state.buy_joker(index):
             self.query_one(ShopGoods)._rebuild()
-            self.refresh_run_ui()
+            await self.refresh_run_ui()
 
-    def buy_pack(self, index: int) -> None:
+    async def buy_pack(self, index: int) -> None:
         key, name, cost = PACKS_ON_SALE[index]
         if not self.game_state.spend(cost):
             return
-        self.refresh_run_ui()
+        await self.refresh_run_ui()
         from .boosters import BoostersScreen
         self.app.push_screen(BoostersScreen(self.game_state, pack_key=key, cost=cost))
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
+    async def on_button_pressed(self, event: Button.Pressed) -> None:
         bid = event.button.id
         if bid == "next_round":
             self.game_state.advance_ante_blind()
@@ -161,4 +160,4 @@ class ShopScreen(GameScreen):
             if self.game_state.reroll_shop():
                 self.query_one(ShopGoods)._rebuild()
                 self._sync_reroll_label()
-                self.refresh_run_ui()
+                await self.refresh_run_ui()

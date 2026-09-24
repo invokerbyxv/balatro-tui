@@ -122,8 +122,8 @@ class BoostersScreen(GameScreen):
         yield GameLayout(RightRow1(), RightRow2Sub(title, self.options))
         yield Footer()
 
-    def on_mount(self):
-        self.refresh_run_ui()
+    async def on_mount(self):
+        await self.refresh_run_ui()
         self._sync_selection()
 
     def select(self, widget) -> None:

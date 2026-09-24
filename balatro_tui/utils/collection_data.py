@@ -295,6 +295,24 @@ def tag_vars(key: str, cfg: dict) -> list:
     }.get(key, [])
 
 
+def tag_item(key: str) -> dict:
+    """按 key 取出一个标签的展示数据,供对局中的标签条/结算使用。
+
+    缺省 key 回落到「标签」占位,避免对局因未收录的定义而中断。
+    """
+    defs = load_definitions().get("Tag") or {}
+    loc = load_descriptions()
+    c = defs.get(key) or {}
+    entry = loc.get("Tag", {}).get(key) or {}
+    name = entry.get("name") or c.get("name") or "标签"
+    return {
+        "key": key,
+        "name": name,
+        "label": f"[{name}]",
+        "desc": _desc("Tag", key, tag_vars(key, get_config(c))) or name,
+    }
+
+
 def blind_vars(entry: dict) -> list:
     out = []
     for v in entry.get("vars") or []:

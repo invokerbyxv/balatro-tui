@@ -103,10 +103,11 @@ class PreparationScreen(GameScreen):
         yield Footer()
 
     def _do_skip(self):
-        """跳过当前盲注:奖励金钱并推进。"""
+        """跳过当前盲注:奖励金钱、随机标签并推进到商店。"""
         blind = self.game_state.current_blind or self.game_state.build_blind_choices()[0]
-        # 简化:跳过奖励 $5,视为打赢了当前盲注不计分
-        self.game_state.dollars += 5
+        # 简化:奖励设为盲注金额,并额外抽一个可获取标签
+        self.game_state.dollars += blind.dollars if blind else 5
+        self.game_state.give_skip_tag()
         self.game_state.blind_in_ante = _advance(self.game_state.blind_in_ante)
         from .shop import ShopScreen
         self.app.push_screen(ShopScreen(self.game_state))

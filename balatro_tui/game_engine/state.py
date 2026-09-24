@@ -87,6 +87,9 @@ class GameState:
         # 商店
         self.shop_jokers: list[dict] = []
 
+        # 标签:跳过盲注时获得的待用标签(HUD 标签条)
+        self.tags: list[str] = []
+
         self._load_hand_levels()
 
     # ------------------------------------------------------------- 初始化
@@ -308,6 +311,34 @@ class GameState:
         self.shop_jokers.pop(index)
         self.jokers.append(item)
         return True
+
+    # ------------------------------------------------------------- 标签
+
+    def add_tag(self, key: str) -> None:
+        """记录一个待用标签(跳盲注/双倍标签等来源)。"""
+        if key not in self.tags:
+            self.tags.append(key)
+
+    def remove_tag(self, index: int | None = None) -> str | None:
+        """取走一个标签;缺省取队首。返回其 key,供触发效果。"""
+        if not self.tags:
+            return None
+        if index is None:
+            index = 0
+        if 0 <= index < len(self.tags):
+            return self.tags.pop(index)
+        return None
+
+    def give_skip_tag(self) -> str | None:
+        """跳过盲注时奖励一个符合当前底注可获取的随机标签。"""
+        tags = load_definitions().get("Tag") or {}
+        pool = [k for k, e in tags.items()
+                if isinstance(e, dict) and self.ante >= (e.get("min_ante") or 1)]
+        if not pool:
+            return None
+        key = random.choice(pool)
+        self.add_tag(key)
+        return key
 
     def add_consumable(self, consumable_type, data):
         self.consumables.setdefault(consumable_type, []).append(data)

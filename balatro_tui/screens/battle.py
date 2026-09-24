@@ -101,9 +101,9 @@ class BattleScreen(GameScreen):
         yield GameLayout(RightRow1(), RightRow2Sub())
         yield Footer()
 
-    def on_mount(self) -> None:
+    async def on_mount(self) -> None:
         self._render_hand()
-        self.refresh_run_ui()
+        await self.refresh_run_ui()
         try:
             self.query_one("#play_hand", PreparationButton).focus()
         except Exception:
@@ -172,7 +172,7 @@ class BattleScreen(GameScreen):
     def _selected_cards(self) -> list:
         return [w.card for cid, w in self._hand_widgets.items() if cid in self.selected]
 
-    def _play(self) -> None:
+    async def _play(self) -> None:
         cards = self._selected_cards()
         calc = self.game_state.play_cards(cards)
         if calc:
@@ -181,16 +181,16 @@ class BattleScreen(GameScreen):
                 f"{calc['chips']}×{calc['mult']} = {calc['score']}"
             )
         self._render_hand()
-        self.refresh_run_ui()
+        await self.refresh_run_ui()
         self._resolve()
 
-    def _discard(self) -> None:
+    async def _discard(self) -> None:
         cards = self._selected_cards()
         ok = self.game_state.discard_cards(cards)
         if ok:
             self.query_one("#played_area", Static).update("已弃牌")
         self._render_hand()
-        self.refresh_run_ui()
+        await self.refresh_run_ui()
 
     def _sort(self, key) -> None:
         self.game_state.hand.sort(key=key)
@@ -210,12 +210,12 @@ class BattleScreen(GameScreen):
 
     # ------------------------------------------------------------- 事件
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
+    async def on_button_pressed(self, event: Button.Pressed) -> None:
         bid = event.button.id
         if bid == "play_hand":
-            self._play()
+            await self._play()
         elif bid == "discard_hand":
-            self._discard()
+            await self._discard()
         elif bid == "sort_rank":
             self._sort_rank()
         elif bid == "sort_suit":
