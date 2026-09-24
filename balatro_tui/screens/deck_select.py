@@ -6,7 +6,47 @@ from textual.widgets import Header, Footer, Button, Static
 
 from balatro_tui.screens.preparation import PreparationScreen
 from balatro_tui.utils.lua_data import load_definitions
-from balatro_tui.utils.loc_text import loc_name
+from balatro_tui.utils.loc_text import loc_name, describe
+
+
+def _ref_name(ref: str) -> str:
+    """把优惠券/消耗牌引用键转成其本地化名称,无法解析时原样返回。"""
+    set_name = "Voucher" if ref.startswith("v_") else ("Tarot" if ref.startswith("c_") else "")
+    name = loc_name(set_name, ref) if set_name else ""
+    return name or ref
+
+
+def _deck_vars(key: str, cfg: dict) -> list:
+    """按描述文本 #n# 占位顺序,从卡组 config 中提取填充值。"""
+    if key == "b_anaglyph":
+        # 该标签是在一局内动态获得的,这里用其名称占位
+        return [loc_name("Tag", "tag_double")]
+    if not cfg:
+        return []
+    abs_ = lambda v: abs(v) if isinstance(v, (int, float)) else v
+
+    if key == "b_red":
+        return [cfg.get("discards")]
+    if key == "b_blue":
+        return [cfg.get("hands")]
+    if key == "b_yellow":
+        return [cfg.get("dollars")]
+    if key == "b_green":
+        return [cfg.get("extra_hand_bonus"), cfg.get("extra_discard_bonus")]
+    if key == "b_black":
+        # 描述文本自带 "-#2#" 符号,config.hands 又是负数,取其绝对值避免 "--1"
+        return [cfg.get("joker_slot"), abs_(cfg.get("hands"))]
+    if key == "b_magic":
+        return [_ref_name(cfg.get("voucher")), _ref_name((cfg.get("consumables") or [None])[0])]
+    if key == "b_nebula":
+        return [_ref_name(cfg.get("voucher")), cfg.get("consumable_slot")]
+    if key == "b_zodiac":
+        return [_ref_name(r) for r in (cfg.get("vouchers") or [])[:3]]
+    if key == "b_painted":
+        return [cfg.get("hand_size"), cfg.get("joker_slot")]
+    if key == "b_plasma":
+        return [cfg.get("ante_scaling")]
+    return []
 
 
 def _deck_options() -> list[dict]:
@@ -16,7 +56,8 @@ def _deck_options() -> list[dict]:
         if c.get("omit") or key == "b_challenge":
             continue
         name = loc_name("Back", key) or c.get("name") or key
-        out.append({"key": key, "name": name, "desc": c.get("name", "")})
+        desc = describe("Back", key, _deck_vars(key, c.get("config") or {})) or c.get("name", "")
+        out.append({"key": key, "name": name, "desc": desc})
     return out
 
 
