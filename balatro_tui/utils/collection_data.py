@@ -291,6 +291,47 @@ def _desc(set_name: str, key: str, vars_: list) -> str:
     return describe(set_name, key, vars_) or "—"
 
 
+def get_hand_levels(levels: dict | None = None) -> list[dict]:
+    levels = levels or {}
+    hands = load_definitions()["_hands"]
+    rows = []
+    for key, h in hands.items():
+        lv = levels.get(key, h.get("level", 1))
+        rows.append({
+            "name": _hand(key),
+            "level": lv,
+            "chips": h.get("s_chips", 0) + h.get("l_chips", 0) * (lv - 1),
+            "mult": h.get("s_mult", 0) + h.get("l_mult", 0) * (lv - 1),
+            "_o": _order_of(h),
+        })
+    rows.sort(key=lambda r: r["_o"])
+    for r in rows:
+        r.pop("_o")
+    return rows
+
+
+def get_vouchers(owned: list[str] | None = None) -> list[dict]:
+    defs = load_definitions()
+    loc = load_descriptions()
+    owned = set(owned) if owned is not None else None
+    rows = []
+    for key, entry in loc["Voucher"].items():
+        if owned is not None and key not in owned:
+            continue
+        c = (defs.get("Voucher") or {}).get(key) or {}
+        rows.append({
+            "name": entry.get("name") or key,
+            "desc": _desc("Voucher", key, voucher_vars(get_config(c))),
+            "rarity": "高阶" if c.get("requires") else "基础",
+            "price": str(c.get("cost") or "—"),
+            "_o": _order_of(c),
+        })
+    rows.sort(key=lambda r: r["_o"])
+    for r in rows:
+        r.pop("_o")
+    return rows
+
+
 _INF = float("inf")
 
 

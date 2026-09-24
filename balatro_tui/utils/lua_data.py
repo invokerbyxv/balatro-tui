@@ -242,13 +242,23 @@ def _parse_section(text: str, marker: str) -> dict:
 
 
 def _parse_hands(text: str) -> dict:
-    """解析 game.lua 中牌型基础数值表(hands = { ["Pair"] = {...} })。"""
+    """解析 game.lua 中牌型基础数值表(hands = { ["Pair"] = {...} })。
+
+    只截取 example 数组(固定排在最后)之前的数值字段。牌型从 level 1 起,
+    升级后的 mult/chips = s_mult + l_mult*(level-1) 等(functions/common_events.lua:467)。
+    """
     hands = {}
-    for m in re.finditer(
-        r'\["([^"]+)"\]\s*=\s*\{[^}]*?\bl_mult\s*=\s*(\d+),\s*l_chips\s*=\s*(\d+)',
-        text,
-    ):
-        hands[m.group(1)] = {"l_mult": int(m.group(2)), "l_chips": int(m.group(3))}
+    fields = ("order", "level", "mult", "chips", "s_mult", "s_chips", "l_mult", "l_chips")
+    pattern = r"\b(%s)\s*=\s*(-?\d+)" % "|".join(fields)
+    for m in re.finditer(r'\["([^"]+)"\]\s*=\s*\{', text):
+        block = text[m.end() : m.end() + 600]
+        j = block.find("example")
+        if j >= 0:
+            block = block[:j]
+        parsed = {k: int(v) for k, v in re.findall(pattern, block)}
+        # 同时含 s_mult/l_mult 的是牌型表,过滤掉 P_TAGS/P_BLINDS 等同名结构
+        if {"s_mult", "l_mult"} <= set(parsed):
+            hands[m.group(1)] = parsed
     return hands
 
 

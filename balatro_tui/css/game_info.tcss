@@ -1,0 +1,22 @@
+#hand_level_left .datatable--header,
+#hand_level_right .datatable--header {
+    background: rgb(83, 83, 83);
+}
+
+#hand_panel,
+#voucher_panel {
+    height: 1fr;
+    padding: 1 2;
+}
+
+.voucher_slot {
+    height: 5;
+    padding: 0 2;
+    border: round #444;
+}
+
+.voucher_slot Static {
+    width: 12.5%;
+    border: round #444;
+    text-align: center;
+}

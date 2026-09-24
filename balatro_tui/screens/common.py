@@ -98,6 +98,13 @@ class LeftContent(VerticalGroup):
             Static("卡组: [52/52]", id="card_deck")
         )
 
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "info":
+            from .game_info import GameInfoScreen
+
+            self.app.push_screen(GameInfoScreen())
+            event.stop()
+
 class LeftContainer(Container):
 
     def compose(self) -> ComposeResult:
