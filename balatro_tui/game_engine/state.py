@@ -100,6 +100,8 @@ class GameState:
 
         # 商店
         self.shop_jokers: list[dict] = []
+        self.shop_packs: list[dict] = []
+        self.shop_voucher: dict | None = None
 
         # 标签:跳过盲注时获得的待用标签(HUD 标签条)
         self.tags: list[str] = []
@@ -344,12 +346,79 @@ class GameState:
 
     # ------------------------------------------------------------- 商店
 
-    def generate_shop(self, count=2):
-        from ..utils.collection_data import joker_item
-        defs = load_definitions().get("Joker") or {}
-        pool = list(defs.keys())
-        pick = random.sample(pool, min(count, len(pool))) if len(pool) >= count else pool
-        self.shop_jokers = [joker_item(k) for k in pick]
+    @property
+    def shop_joker_max(self) -> int:
+        """小丑栏上限:基础 2,Overstock/Overstock Plus 各 +1(参考 change_shop_size)。"""
+        over = sum(1 for v in self.vouchers if v in ("v_overstock_norm", "v_overstock_plus"))
+        return 2 + over
+
+    def _shop_slot_mode(self) -> dict:
+        """小丑栏单格可能混入消耗牌:默认低概率;鬼牌 spectral_rate 等提高并纳入妖法牌。"""
+        prob = 0.08
+        sets = ["Tarot", "Planet"]
+        boost = 0.4 if self.spectral_rate else 0.0
+        if boost:
+            prob = min(prob + boost, 1.0)
+            sets.insert(0, "Spectral")
+        return {"prob": prob, "sets": sets}
+
+    def generate_shop(self) -> None:
+        """按默认排列重建商店:小丑栏(joker_max)、卡包栏(2)、优惠券栏(1)。"""
+        from ..utils.collection_data import joker_item, consumable_item
+        defs = load_definitions()
+        joker_pool = list((defs.get("Joker") or {}).keys())
+        mode = self._shop_slot_mode()
+
+        # 小丑栏:每格低概率为消耗牌,否则小丑
+        self.shop_jokers = []
+        for _ in range(self.shop_joker_max):
+            if random.random() < mode["prob"] and mode["sets"]:
+                set_name = random.choice(mode["sets"])
+                pool = list((defs.get(set_name) or {}).keys())
+                key = random.choice(pool) if pool else None
+                if key:
+                    item = consumable_item(set_name, key)
+                    item["kind"] = set_name.lower()              # tarot/planet/spectral
+                else:
+                    item = joker_item(random.choice(joker_pool))
+                    item["kind"] = "joker"
+            else:
+                key = random.choice(joker_pool)
+                item = joker_item(key)
+                item["kind"] = "joker"
+            self.shop_jokers.append(item)
+
+        # 卡包栏:从可开包的 kind 池按 weight 加权抽 2 个
+        booster_pool = {
+            k: c for k, c in (defs.get("Booster") or {}).items()
+            if c.get("kind") in ("Buffoon", "Arcana", "Celestial", "Spectral")
+        }
+        kinds = list(booster_pool.keys())
+        weights = [booster_pool[k].get("weight", 1) for k in kinds]
+        self.shop_packs = []
+        for _ in range(2):
+            key = random.choices(kinds, weights=weights)[0]
+            c = booster_pool[key]
+            cfg = get_config(c)
+            self.shop_packs.append({
+                "key": key,
+                "kind": c.get("kind", "").lower(),
+                "name": c.get("name") or key,
+                "cost": c.get("cost") or 4,
+                "extra": cfg.get("extra") or 2,
+                "choose": cfg.get("choose") or 1,
+            })
+
+        # 优惠券栏:随机 1 张未持有的可用券
+        avail = [
+            k for k, c in (defs.get("Voucher") or {}).items()
+            if c.get("available") and k not in self.vouchers
+        ]
+        key = random.choice(avail) if avail else None
+        self.shop_voucher = None
+        if key:
+            c = (defs.get("Voucher") or {}).get(key) or {}
+            self.shop_voucher = {"key": key, "name": c.get("name") or key, "cost": c.get("cost") or 4}
 
     def reroll_shop(self) -> bool:
         if not self.spend(self.reroll_cost):
@@ -363,11 +432,34 @@ class GameState:
         if not (0 <= index < len(self.shop_jokers)):
             return False
         item = self.shop_jokers[index]
-        if not self.spend(item["cost"]):
+        if not self.spend(item.get("cost", 1)):
             return False
         self.shop_jokers.pop(index)
-        self.jokers.append(item)
+        if item.get("kind") == "joker":
+            self.jokers.append(item)
+        else:
+            self.consumables.setdefault(item["kind"] + "s", []).append(item)
         return True
+
+    def buy_pack(self, index: int) -> dict | None:
+        if not (0 <= index < len(self.shop_packs)):
+            return None
+        pack = self.shop_packs[index]
+        if not self.spend(pack["cost"]):
+            return None
+        self.shop_packs.pop(index)
+        return pack
+
+    def buy_voucher(self) -> dict | None:
+        if not self.shop_voucher:
+            return None
+        voucher = self.shop_voucher
+        if not self.spend(voucher["cost"]):
+            return None
+        self.shop_voucher = None
+        if voucher["key"] not in self.vouchers:
+            self.vouchers.append(voucher["key"])
+        return voucher
 
     # ------------------------------------------------------------- 标签
 

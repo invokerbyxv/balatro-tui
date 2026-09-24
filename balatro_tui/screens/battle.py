@@ -95,6 +95,7 @@ class BattleScreen(GameScreen):
         self.selected: set = set()
         self._hand_widgets = {}
         self._uid = 0
+        self._sort_mode = "rank"
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -102,6 +103,7 @@ class BattleScreen(GameScreen):
         yield Footer()
 
     async def on_mount(self) -> None:
+        self._apply_sort()
         self._render_hand()
         await self.refresh_run_ui()
         try:
@@ -180,6 +182,7 @@ class BattleScreen(GameScreen):
                 f"打出: {HAND_ZH.get(calc['hand_key'], calc['hand_key'])} "
                 f"{calc['chips']}×{calc['mult']} = {calc['score']}"
             )
+        self._apply_sort()
         self._render_hand()
         await self.refresh_run_ui()
         self._resolve()
@@ -189,6 +192,7 @@ class BattleScreen(GameScreen):
         ok = self.game_state.discard_cards(cards)
         if ok:
             self.query_one("#played_area", Static).update("已弃牌")
+        self._apply_sort()
         self._render_hand()
         await self.refresh_run_ui()
 
@@ -196,11 +200,30 @@ class BattleScreen(GameScreen):
         self.game_state.hand.sort(key=key)
         self._render_hand()
 
+    def _apply_sort(self) -> None:
+        """按当前排序规则重排手牌。弃牌/出牌后调用,维持玩家选择的排序。"""
+        if self._sort_mode == "rank":
+            self._sort_by_rank()
+        else:
+            self._sort_by_suit()
+
+    def _sort_by_rank(self) -> None:
+        self.game_state.hand.sort(
+            key=lambda c: (-c.rank_order(), c.suit_order())
+        )
+
+    def _sort_by_suit(self) -> None:
+        self.game_state.hand.sort(
+            key=lambda c: (c.suit_order(), -c.rank_order())
+        )
+
     def _sort_rank(self) -> None:
-        self._sort(lambda c: (-c.nominal, c.suit_order()))
+        self._sort_mode = "rank"
+        self._apply_sort()
 
     def _sort_suit(self) -> None:
-        self._sort(lambda c: (c.suit_order(), -c.nominal))
+        self._sort_mode = "suit"
+        self._apply_sort()
 
     def _resolve(self) -> None:
         """胜利进结算;失败(出牌用尽且未达标)也进结算,由结算判断。"""

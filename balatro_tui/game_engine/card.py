@@ -21,6 +21,10 @@ class Card:
     def suit_order(self) -> int:
         return self.SUIT_ORDER.get(self.suit, 0)
 
+    def rank_order(self) -> int:
+        """全局牌级序号,2最小、Ace最大。用于排序,避免 JQK 在 nominal 下并列。"""
+        return self.RANKS.index(self.rank)
+
     def display(self) -> str:
         """简短显示字符串,如 ♠A / ♥10。"""
         from ..utils.helpers import get_card_suit_symbol
