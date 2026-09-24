@@ -185,6 +185,25 @@ def joker_vars(name: str, cfg: dict) -> list:
     return [extra] if isinstance(extra, (int, float)) else []
 
 
+def joker_item(key: str) -> dict:
+    """按 key 取出一个小丑的展示与效果数据,供商店/持有条/计分使用。"""
+    defs = load_definitions().get("Joker") or {}
+    loc = load_descriptions()
+    c = defs.get(key) or {}
+    cfg = get_config(c)
+    entry = loc.get("Joker", {}).get(key) or {}
+    return {
+        "key": key,
+        "name": entry.get("name") or c.get("name", ""),
+        "label": f"[{entry.get('name') or c.get('name', '小丑')}]",
+        "desc": _desc("Joker", key, joker_vars(c.get("name", ""), cfg)) or "小丑牌",
+        "effect": c.get("effect", ""),
+        "config": cfg,
+        "cost": c.get("cost") or 1,
+        "rarity": RARITY_ZH.get(c.get("rarity"), "普通"),
+    }
+
+
 # --------------------------------------------------------------- 其他类别
 def tarot_vars(key: str, cfg: dict) -> list:
     if key == "c_wheel_of_fortune":

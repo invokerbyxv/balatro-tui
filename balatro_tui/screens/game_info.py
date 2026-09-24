@@ -8,12 +8,16 @@ from ..utils.collection_data import get_hand_levels, get_vouchers
 
 class HandLevelTable(Horizontal):
 
+    def __init__(self, levels=None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.levels = levels or {}
+
     def compose(self) -> ComposeResult:
         yield DataTable(id="hand_level_left")
         yield DataTable(id="hand_level_right")
 
     def on_mount(self) -> None:
-        rows = get_hand_levels()
+        rows = get_hand_levels({k: v.get("level", 1) for k, v in self.levels.items()}) if self.levels else get_hand_levels()
         mid = (len(rows) + 1) // 2
         for side, chunk in (
             ("hand_level_left", rows[:mid]),
@@ -59,8 +63,9 @@ class GameInfoScreen(Screen):
         ("v", "voucher", "优惠券"),
     ]
 
-    def __init__(self, *children, **kwargs):
+    def __init__(self, game_state=None, *children, **kwargs):
         self.mode = "hand"  # "hand" / "voucher",默认牌型
+        self.game_state = game_state
         super().__init__(*children, **kwargs)
 
     def action_quit(self):
@@ -71,7 +76,8 @@ class GameInfoScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield HandLevelTable(id="hand_panel")
+        levels = getattr(self.game_state, "hand_levels", None) or {}
+        yield HandLevelTable(levels, id="hand_panel")
         yield Voucher(id="voucher_panel")
         yield Footer()
 

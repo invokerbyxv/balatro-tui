@@ -47,3 +47,12 @@ ActionBar Center {
 #sort_buttons {
     align-horizontal: center;
 }
+
+HandHorizontalScroll Static.selected {
+    background: rgb(120, 160, 220);
+    color: black;
+}
+
+HandCard:hover {
+    text-style: bold;
+}

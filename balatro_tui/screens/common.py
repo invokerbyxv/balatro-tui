@@ -1,5 +1,7 @@
 """Shared widgets for the in-run scenes (blind choice, battle, shop, settlement, boosters)."""
 
+from __future__ import annotations
+
 from textual import events
 from textual.app import ComposeResult
 from textual.containers import Center, Container, Horizontal, HorizontalScroll, VerticalGroup, VerticalScroll
@@ -7,6 +9,8 @@ from textual.css.query import NoMatches
 from textual.screen import Screen
 from textual.widget import Widget
 from textual.widgets import Button, DataTable, Static
+
+from ..utils.helpers import format_number
 
 
 class FocusableStatic(Static):
@@ -65,17 +69,21 @@ class ScrollInteraction:
         event.stop()
 
 
+def _state(screen: Screen):
+    return getattr(screen, "game_state", None)
+
+
 class LeftContent(VerticalGroup):
 
     def compose(self) -> ComposeResult:
         yield Horizontal(
-            Static("大盲注", id="level"),
-            Static("至少得分: 75,000", id="require"),
+            Static("小盲注", id="level"),
+            Static("目标: 300", id="require"),
             id="row_1"
         )
         yield Horizontal(
-            Static("奖励: $$$$", id="rewards"),
-            Static("回合分数: 0", id="score"),
+            Static("奖励: $3", id="rewards"),
+            Static("得分: 0", id="score"),
             id="row_2"
         )
         yield Horizontal(
@@ -83,75 +91,143 @@ class LeftContent(VerticalGroup):
             Static("0", id="mult"),
             id="calculation"
         )
-        tb_1 = DataTable(id="left_content_tb_1",)
+        tb_1 = DataTable(id="left_content_tb_1")
         tb_1.add_column("出牌", key="plays")
         tb_1.add_column("弃牌", key="discards")
         tb_1.add_column("底注", key="ante")
         tb_1.add_column("回合", key="round")
         tb_1.add_column("钱", key="money")
-        tb_1.add_row(0, 0, "8/8", 29, "$190")
+        tb_1.add_row(0, 0, "1/8", 1, "$4")
         tb_1.cursor_type = "none"
         yield tb_1
 
         yield Horizontal(
             PreparationButton("游戏信息", id="info"),
-            Static("卡组: [52/52]", id="card_deck")
+            Static("[0/52]", id="card_deck"),
         )
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "info":
             from .game_info import GameInfoScreen
-
-            self.app.push_screen(GameInfoScreen())
+            self.app.push_screen(GameInfoScreen(_state(self.screen)))
             event.stop()
+
+    def refresh_run(self, state=None) -> None:
+        state = state or _state(self.screen)
+        if state is None:
+            return
+        blind = state.current_blind
+        level = blind.name if blind else f"底注 {state.ante}"
+        self.query_one("#level", Static).update(level)
+        require = f"目标: {format_number(state.blind_target)}" if blind else "目标: --"
+        self.query_one("#require", Static).update(require)
+        reward = f"奖励: ${blind.dollars}" if blind else "奖励: $0"
+        self.query_one("#rewards", Static).update(reward)
+        self.query_one("#score", Static).update(f"得分: {format_number(state.score_chips)}")
+        calc = state.last_calc
+        if calc:
+            self.query_one("#chips", Static).update(f"{format_number(calc['chips'])}")
+            self.query_one("#mult", Static).update(f"× {format_number(calc['mult'])}")
+        else:
+            self.query_one("#chips", Static).update("0")
+            self.query_one("#mult", Static).update("0")
+        hands = state.hands_left if hasattr(state, "hands_left") else 0
+        discards = state.discards_left if hasattr(state, "discards_left") else 0
+        tbl = self.query_one("#left_content_tb_1", DataTable)
+        if tbl.row_count:
+            tbl.update_cell_at((0, 0), hands)
+            tbl.update_cell_at((0, 1), discards)
+            tbl.update_cell_at((0, 3), f"<{state.ante}/{8}>")
+            tbl.update_cell_at((0, 4), f"${state.dollars}")
+        self.query_one("#card_deck", Static).update(
+            f"[{len(state.deck)}]/[{52}]"
+        )
+
 
 class LeftContainer(Container):
 
     def compose(self) -> ComposeResult:
         yield LeftContent()
 
+
 class JokerHorizontalScroll(
     ScrollInteraction, FocusNavigationScroll, HorizontalMouseScroll, HorizontalScroll
 ):
 
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._n = 0
+
     def compose(self) -> ComposeResult:
         self.can_focus = True
         self.can_focus_children = True
-        j_photograph = FocusableStatic("[照片]", id="joker_1")
-        j_photograph.tooltip = "打出的第一张人头牌在计分时会给予 X2 倍率"
+        yield from self._children()
 
-        yield j_photograph
-        for index, label in enumerate((
-            "[幻视]", "[帕奇欧]", "[爆米花]", "[致胜之拳]", "[拉面]",
-            "[红牌]", "[私人车位]", "[搭乘巴士]", "[乌合之众]", "[马戏团长]",
-            "[火箭]", "[璞玉]", "[跑步选手]", "[卫星]",
-        ), start=2):
-            yield FocusableStatic(label, id=f"joker_{index}")
+    def _children(self):
+        state = _state(self.screen)
+        jokers = state.jokers if state else []
+        for i, joker in enumerate(jokers, start=1):
+            self._n += 1
+            item = FocusableStatic(joker.get("label") or "[小丑]", id=f"joker_{self._n}")
+            item.tooltip = joker.get("desc") or "小丑牌"
+            yield item
+
+    def _rebuild(self) -> None:
+        self.remove_children()
+        for w in self._children():
+            self.mount(w)
+
+    def refresh_run(self, state=None) -> None:
+        self._rebuild()
+
 
 class ConsumableHorizontalScroll(
     ScrollInteraction, FocusNavigationScroll, HorizontalMouseScroll, HorizontalScroll
 ):
 
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._n = 0
+
     def compose(self) -> ComposeResult:
         self.can_focus = True
         self.can_focus_children = True
-        for index, label in enumerate((
-            "[愚者]", "|[愚者]", "[愚者]", "[地球]", "[地球]",
-            "[阋神星]", "[阋神星]", "[阋神星]", "[木星]", "[木星]",
-            "[木星]", "[木星]",
-        ), start=1):
-            yield FocusableStatic(label, id=f"consumable_{index}")
+        yield from self._children()
+
+    def _children(self):
+        state = _state(self.screen)
+        items = []
+        if state:
+            for t in ("tarots", "planets", "spectrals"):
+                items.extend((t, x) for x in state.consumables.get(t, []))
+        for i, (t, item) in enumerate(items, start=1):
+            title = {"tarots": "塔罗", "planets": "星球", "spectrals": "幻灵"}.get(t, "消耗品")
+            self._n += 1
+            fs = FocusableStatic(f"[{title}]", id=f"consumable_{self._n}")
+            if isinstance(item, dict):
+                fs.tooltip = item.get("desc") or "消耗品"
+            yield fs
+
+    def _rebuild(self) -> None:
+        self.remove_children()
+        for w in self._children():
+            self.mount(w)
+
+    def refresh_run(self, state=None) -> None:
+        self._rebuild()
 
 
 class RightRow1Sub(Horizontal):
 
     def compose(self) -> ComposeResult:
         yield JokerHorizontalScroll()
-        yield Static("[14/14]", id="joker_count")
+        yield Static("[0/0]", id="joker_count")
         yield ConsumableHorizontalScroll()
-        yield Static("[11/11]", id="consumable_count")
+        yield Static("[0/0]", id="consumable_count")
+
 
 class RightRow1(Container):
+
     def compose(self) -> ComposeResult:
         yield RightRow1Sub()
 
@@ -162,7 +238,7 @@ class Tag(ScrollInteraction, FocusNavigationScroll, VerticalScroll):
         self.can_focus = True
         self.can_focus_children = True
         for index, label in enumerate((
-            "[负片]", "[负片]", "[负片]", "[负片]", "[负片]", "[双倍]", "[双倍]",
+            "[负片]", "[负片]", "[负片]", "[负片]",
         ), start=1):
             yield FocusableStatic(label, id=f"tag_{index}")
 
@@ -198,7 +274,53 @@ class GameScreen(Screen):
     def action_go_back(self):
         self.app.pop_screen()
 
+    def refresh_run_ui(self) -> None:
+        """刷新左侧信息栏与小丑/消耗品条。"""
+        for cls, method in (
+            (LeftContent, "refresh_run"),
+            (JokerHorizontalScroll, "refresh_run"),
+            (ConsumableHorizontalScroll, "refresh_run"),
+        ):
+            for widget in self.query(cls):
+                try:
+                    getattr(widget, method)()
+                except NoMatches:
+                    pass
+        self._refresh_counts()
+
+    def _refresh_counts(self) -> None:
+        state = _state(self)
+        if state is None:
+            return
+        for widget in self.query(JokerHorizontalScroll):
+            self.refresh_joker_count()
+        for widget in self.query(ConsumableHorizontalScroll):
+            self.refresh_consumable_count()
+
+    def refresh_joker_count(self) -> None:
+        state = _state(self)
+        if state is None:
+            return
+        n = len(state.jokers)
+        cap = state.params.get("joker_slots", 5)
+        try:
+            self.query_one("#joker_count", Static).update(f"[{n}/{cap}]")
+        except NoMatches:
+            pass
+
+    def refresh_consumable_count(self) -> None:
+        state = _state(self)
+        if state is None:
+            return
+        n = sum(len(state.consumables.get(t, [])) for t in ("tarots", "planets", "spectrals"))
+        cap = state.params.get("consumables", 2)
+        try:
+            self.query_one("#consumable_count", Static).update(f"[{n}/{cap}]")
+        except NoMatches:
+            pass
+
     def on_mount(self) -> None:
+        self.refresh_run_ui()
         try:
             self.query_one(f"#{self.initial_focus_id}", PreparationButton).focus()
         except NoMatches:

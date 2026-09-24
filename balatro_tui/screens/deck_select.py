@@ -5,7 +5,28 @@ from textual.widget import Widget
 from textual.widgets import Header, Footer, Button, Static
 
 from balatro_tui.screens.preparation import PreparationScreen
-from balatro_tui.utils.collection_data import get_rows
+from balatro_tui.utils.lua_data import load_definitions
+from balatro_tui.utils.loc_text import loc_name
+
+
+def _deck_options() -> list[dict]:
+    defs = (load_definitions().get("Back") or {})
+    out = []
+    for key, c in defs.items():
+        if c.get("omit") or key == "b_challenge":
+            continue
+        name = loc_name("Back", key) or c.get("name") or key
+        out.append({"key": key, "name": name, "desc": c.get("name", "")})
+    return out
+
+
+def _stake_options() -> list[dict]:
+    return [
+        {"key": "stake_1", "name": "白色底注", "desc": "标准规则"},
+        {"key": "stake_2", "name": "红色底注", "desc": "小盲不奖励金钱"},
+        {"key": "stake_3", "name": "绿色底注", "desc": "目标分增长更快"},
+        {"key": "stake_4", "name": "黑色底注", "desc": "商店可能出永恒小丑"},
+    ]
 
 
 class SelectionRow(HorizontalGroup):
@@ -19,12 +40,12 @@ class SelectionRow(HorizontalGroup):
     def compose(self) -> ComposeResult:
         yield Button("<", flat=True, id=f"{self.id}_left")
         yield Static(self.current_text, id=f"{self.id}_static")
-        yield Button(">", flat=True,  id=f"{self.id}_right")
+        yield Button(">", flat=True, id=f"{self.id}_right")
 
     @property
     def current_text(self) -> str:
         entry = self.row[self.index]
-        return f"{entry['name']} {entry['desc']}"
+        return f"{entry.get('name')} {entry.get('desc', '')}"
 
     def step(self, delta: int):
         self.index = (self.index + delta) % len(self.row)
@@ -36,10 +57,11 @@ class SelectionRow(HorizontalGroup):
         elif event.button.id.endswith("_right"):
             self.step(1)
 
+
 class DeckSelectScreen(Screen):
 
     CSS_PATH = "../css/selection.tcss"
-    
+
     BINDINGS = [
         ("q", "quit", "退出"),
         ("escape", "go_back", "返回"),
@@ -50,15 +72,17 @@ class DeckSelectScreen(Screen):
         ("left", "left", ""),
         ("right", "right", ""),
     ]
-    
+
     def __init__(self, game_state):
         super().__init__()
         self.game_state = game_state
+        self.deck_options = _deck_options()
+        self.stake_options = _stake_options()
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield SelectionRow(id="deck_select", row=get_rows("decks"))
-        yield SelectionRow(id="stake_select", row=get_rows("stake"))
+        yield SelectionRow(id="deck_select", row=self.deck_options)
+        yield SelectionRow(id="stake_select", row=self.stake_options)
         yield Footer()
 
     def on_mount(self):
@@ -95,6 +119,9 @@ class DeckSelectScreen(Screen):
             row.step(1)
 
     def action_confirm_selection(self):
+        deck_row = self.query_one("#deck_select", SelectionRow)
+        stake_row = self.query_one("#stake_select", SelectionRow)
+        deck_entry = deck_row.row[deck_row.index]
+        self.game_state.stake = stake_row.index + 1
+        self.game_state.set_deck(deck_entry["key"])
         self.app.push_screen(PreparationScreen(self.game_state))
-
-
