@@ -3,8 +3,7 @@ BattleArea {
 }
 
 #played_area {
-    height: 1fr;
-    border-bottom: heavy rgb(83, 83, 83);
+    height: 1;
 }
 
 #played_area Static {
@@ -28,7 +27,7 @@ HandHorizontalScroll Static {
 }
 
 ActionBar {
-    height: 3;
+    height: 2;
     align-horizontal: center;
 }
 
