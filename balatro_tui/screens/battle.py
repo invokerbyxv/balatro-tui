@@ -102,7 +102,7 @@ class BattleScreen(GameScreen):
 
     def _sort_hand(self, key) -> None:
         hand = self.query_one(HandHorizontalScroll)
-        cards = sorted(hand.query(Card), key=lambda x: key(card.card_text))
+        cards = sorted(hand.query(Card), key=lambda x: key(x.card_text))
         if cards and cards[0] is not hand.children[0]:
             hand.move_child(cards[0], before=hand.children[0])
         for previous, card in zip(cards, cards[1:]):

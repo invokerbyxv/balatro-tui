@@ -8,7 +8,7 @@ from .common import (
     GameLayout,
     GameScreen,
     PreparationButton,
-    RightRow1,
+    RightRow1, Tag,
 )
 
 JOKERS_ON_SALE = [
@@ -59,7 +59,13 @@ class ShopPanel(Horizontal):
             id="shop_actions"
         )
         yield ShopGoods()
+        yield Tag()
 
+class RightRow2Sub(Horizontal):
+
+    def compose(self) -> ComposeResult:
+        yield ShopPanel()
+        yield Tag()
 
 class ShopScreen(GameScreen):
     """商店场景。"""
@@ -72,7 +78,7 @@ class ShopScreen(GameScreen):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield GameLayout(RightRow1(), ShopPanel())
+        yield GameLayout(RightRow1(), RightRow2Sub())
         yield Footer()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
