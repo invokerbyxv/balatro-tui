@@ -31,8 +31,14 @@ def cards() -> dict:
 
 
 @lru_cache(maxsize=None)
+def tags() -> dict:
+    """`self.P_TAGS` (game.lua:224) - the tag prototypes, keyed by tag key."""
+    return _load("tags.json")
+
+
+@lru_cache(maxsize=None)
 def pools() -> dict:
-    return build_pools(centers())
+    return build_pools(centers(), tags())
 
 
 @lru_cache(maxsize=None)

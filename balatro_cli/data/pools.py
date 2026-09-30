@@ -1,9 +1,12 @@
 """Build generation pools from extracted centers, mirroring game.lua:780-845.
 
 Pools (sets): Booster, Default, Enhanced, Edition, Joker, Tarot, Planet,
-Tarot_Planet, Spectral, Consumeables, Voucher, Back, plus P_JOKER_RARITY_POOLS.
+Tarot_Planet, Spectral, Consumeables, Voucher, Back, Tag, plus
+P_JOKER_RARITY_POOLS.
 
 Joker rarity: index 1=Common, 2=Uncommon, 3=Rare, 4=Legendary (as in source).
+Tags come from `self.P_TAGS` (game.lua:224, `P_CENTER_POOLS['Tag']` at
+game.lua:791) and need `min_ante` for pool culling (common_events.lua:1982).
 Each pool is sorted by the center's `order` (Backs offset by unlock, which v1
 does not track — all backs treated as unlocked).
 
@@ -17,7 +20,7 @@ from pathlib import Path
 
 _SET_ORDER = [
     "Booster", "Default", "Enhanced", "Edition", "Joker", "Tarot", "Planet",
-    "Tarot_Planet", "Spectral", "Consumeables", "Voucher", "Back",
+    "Tarot_Planet", "Spectral", "Consumeables", "Voucher", "Back", "Tag",
 ]
 
 
@@ -25,7 +28,7 @@ def load_raw(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def build_pools(centers: dict) -> dict:
+def build_pools(centers: dict, tags: dict | None = None) -> dict:
     pools: dict[str, list[dict]] = {s: [] for s in _SET_ORDER}
     rarity: list[list[dict]] = [[], [], [], [], []]  # index 1..4 (Lua is 1-based)
 
@@ -48,6 +51,14 @@ def build_pools(centers: dict) -> dict:
             pools["Consumeables"].append(item)
         if v.get("rarity") and s == "Joker" and not v.get("demo"):
             rarity[v["rarity"]].append(item)
+
+    # P_TAGS -> P_CENTER_POOLS['Tag'] (game.lua:779-793)
+    for key, v in (tags or {}).items():
+        if not isinstance(v, dict) or v.get("wip") or v.get("demo"):
+            continue
+        item = dict(v)
+        item["key"] = key
+        pools["Tag"].append(item)
 
     for name in pools:
         pools[name].sort(key=lambda a: (a.get("order") is None, a.get("order", 0)))

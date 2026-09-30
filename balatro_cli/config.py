@@ -28,9 +28,19 @@ STARTING_PARAMS = {
 # Reroll cost escalation (calculate_reroll_cost): base 5, +1 each time.
 REROLL_COST_INCREASE = 1
 
+# Shop layout: 2 card slots (jokers/consumables) + 2 booster slots (game.lua
+# shop creation), each raisable by the Overstock vouchers.
+SHOP_SIZE = 2
+BOOSTER_SLOTS = 2
+VOUCHER_SLOTS = 1
+
 # Interest (state_events.lua ~1192): dollars += amount * min(floor(dollars/5), cap/5)
 INTEREST_AMOUNT = 1
 INTEREST_CAP = 25  # /5 => max $5 interest at $25 held
+
+# Tag / pack draw rates
+DEFAULT_TAG_RATE = 1
+SPECTRAL_RATE = 0
 
 # ---------------------------------------------------------------------------
 # Poker hand base levels (game.lua ~2002)
@@ -64,12 +74,30 @@ HAND_ORDER: list[str] = list(dict(sorted(HAND_LEVELS.items(), key=lambda kv: kv[
 # ---------------------------------------------------------------------------
 BLIND_AMOUNT_TABLE = [300, 800, 2000, 5000, 11000, 20000, 35000, 50000]
 
-# Deck back -> starting param deltas (game.lua:628+, P_CENTERS set="Back")
+# Deck back -> starting param deltas (game.lua:628+, P_CENTERS set="Back").
+#
+# Deprecated view: `engine/backs.py` is the authoritative implementation
+# (`backs.deltas_for(deck_key)`), and this table must stay a superset of it
+# (pinned by tests/test_vouchers_backs.py). `GameState._apply_deck` folds these in
+# ADDITIVELY, so `_apply_deck` must not be combined with `backs.setup(apply=True)`
+# for the same run. Note the Lua *assigns* `ante_scaling` rather than adding it
+# (back.lua:263) - pass `scaling=2` to GameState for b_plasma.
 DECK_DELTAS = {
     "b_red":        {"discards": 1},
     "b_blue":       {"hands": 1},
     "b_yellow":     {"dollars": 10},
-    "b_green":      {"no_interest": True, "extra_hand_bonus": 2, "extra_discard_bonus": 2, "hands": 0, "discards": 0},
+    # game.lua:631 -> extra_discard_bonus is 1 ($1 per remaining discard), not 2.
+    "b_green":      {"no_interest": True, "extra_hand_bonus": 2, "extra_discard_bonus": 1},
     "b_black":      {"joker_slots": 1, "hands": -1},
-    "b_magic":      {"consumables": ["c_fool", "c_fool"], "voucher": "v_crystal_ball"},
+    "b_magic":      {"voucher": "v_crystal_ball", "consumables": ["c_fool", "c_fool"]},
+    "b_nebula":     {"voucher": "v_telescope", "consumable_slots": -1},
+    "b_ghost":      {"spectral_rate": 2, "consumables": ["c_hex"]},
+    "b_abandoned":  {"remove_faces": True},
+    "b_checkered":  {"checkered_deck": True},
+    "b_zodiac":     {"vouchers": ["v_tarot_merchant", "v_planet_merchant", "v_overstock_norm"]},
+    "b_painted":    {"hand_size": 2, "joker_slots": -1},
+    "b_anaglyph":   {},
+    "b_plasma":     {"ante_scaling": 2},
+    "b_erratic":    {"randomize_rank_suit": True},
+    "b_challenge":  {},
 }

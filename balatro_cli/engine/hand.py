@@ -30,6 +30,7 @@ class JokerFlags:
     four_fingers: bool = False
     shortcut: bool = False
     smeared: bool = False
+    pareidolia: bool = False   # every card counts as a face card (card.lua:964)
 
 
 def get_X_same(num: int, hand: list[Card]) -> list[list[Card]]:

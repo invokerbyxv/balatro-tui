@@ -58,17 +58,15 @@ def read_key() -> str:
 
 
 def _read_line_key() -> str:
+    """Line-mode fallback: returns the trimmed line so `c1` / `x2` work."""
     try:
         line = input("")
     except EOFError:
         return "q"
     line = (line or "").strip().lower()
     if not line:
-        return "n"
-    # single-letter command
-    if len(line) == 1:
-        return line
-    return line[0]
+        return "enter"
+    return line
 
 
 def key_name(ch: str) -> str:

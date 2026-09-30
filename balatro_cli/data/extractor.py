@@ -8,6 +8,8 @@ Extraction targets (all pure data literals):
 - game.lua:  `self.P_BLINDS`   -> assets/blinds.json   (small/big/boss blinds)
 - localization/{en-us,zh_CN}.lua -> assets/loc_en.json, assets/loc_zh.json
 - game.lua:  `self.P_CARDS`    -> assets/cards.json    (the 52 base playing cards)
+- game.lua:  `self.P_TAGS`     -> assets/tags.json     (the 24 blind-skip tags;
+             `config.type` + `min_ante` drive engine/tags.py)
 
 Poker-hand base levels are tiny + stable and live directly in config.HAND_LEVELS
 rather than being parsed.
@@ -47,6 +49,11 @@ def extract_cards(src: Path) -> dict:
     return parse_assignment_table((src / "game.lua").read_text(encoding="utf-8"), "self.P_CARDS")
 
 
+def extract_tags(src: Path) -> dict:
+    """`self.P_TAGS` (game.lua:224) - the tag prototypes."""
+    return parse_assignment_table((src / "game.lua").read_text(encoding="utf-8"), "self.P_TAGS")
+
+
 def extract_localization(src: Path, locale: str) -> dict:
     path = src / "localization" / f"{locale}.lua"
     if not path.exists():
@@ -72,12 +79,14 @@ def extract_all(asset_dir: Path | None = None, src: Path | None = None) -> dict[
     centers = extract_centers(src)
     blinds = extract_blinds(src)
     cards = extract_cards(src)
+    tags = extract_tags(src)
     loc_en = extract_localization(src, "en-us")
     loc_zh = extract_localization(src, "zh_CN")
 
     write_json(asset_dir, "centers.json", centers)
     write_json(asset_dir, "blinds.json", blinds)
     write_json(asset_dir, "cards.json", cards)
+    write_json(asset_dir, "tags.json", tags)
     write_json(asset_dir, "loc_en.json", loc_en)
     write_json(asset_dir, "loc_zh.json", loc_zh)
 
@@ -85,6 +94,7 @@ def extract_all(asset_dir: Path | None = None, src: Path | None = None) -> dict[
         "centers": len(centers),
         "blinds": len(blinds),
         "cards": len(cards),
+        "tags": len(tags),
         "sets": sorted({c["set"] for c in centers.values() if isinstance(c, dict) and c.get("set")}),
     }
     print("counts:", counts)
