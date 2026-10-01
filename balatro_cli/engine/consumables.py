@@ -229,7 +229,11 @@ def _free_consumable_slots(run) -> int:
     return max(0, _consumable_limit(run) - len(_card_list(run, "consumeables")))
 
 
-def _joker_sell_cost(j) -> int:
+def _joker_sell_cost(run, j) -> int:
+    """Card:set_cost sell_cost (card.lua:382) - the run's canonical value."""
+    sell = getattr(run, "sell_value", None)
+    if callable(sell):
+        return int(sell(j))
     sc = getattr(j, "sell_cost", None)
     if isinstance(sc, (int, float)):
         return int(sc)
@@ -707,6 +711,9 @@ def _cryptid(run, key, kind, name, cfg, targets):
             new_card = Card(source.rank, source.suit, source.enhancement,
                             source.edition, source.seal)
         _add_playing_card(run, new_card)
+        # card.lua:1210 - each copy raises the deck's card_limit
+        if isinstance(getattr(run, "params", None), dict):
+            run.params["deck_limit"] = run.params.get("deck_limit", 52) + 1
     return _ok(key, kind, copies=max(0, count), n=max(0, count))
 
 
@@ -779,7 +786,7 @@ def _the_hermit(run, key, kind, name, cfg, targets):
 def _temperance(run, key, kind, name, cfg, targets):
     # card.lua:1393 - add the summed sell value of owned jokers, capped
     cap = int(cfg.get("extra", 50) or 0)
-    total = sum(_joker_sell_cost(j) for j in _jokers(run) if _is_joker(j))
+    total = sum(_joker_sell_cost(run, j) for j in _jokers(run) if _is_joker(j))
     amount = max(0, min(total, cap))
     _add_dollars(run, amount)
     return _ok(key, kind, dollars=amount, money=amount, total=total)

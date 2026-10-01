@@ -200,3 +200,104 @@ def test_shop_playing_card_slot_can_be_bought_into_deck():
     g.dollars = 10
     r = s.buy(0)
     assert r["ok"] and card in g.deck
+
+
+# -- 2026-10-01 follow-up pass (see PORTING_PLAN.md re-audit notes) ------------
+
+def test_sell_value_includes_edition_bump():
+    g = _game()
+    j = g.add_joker("j_joker")              # base cost 2
+    base = g.sell_value(j)
+    j.edition = "e_foil"                    # card.lua:372 - foil adds 2
+    assert g.sell_value(j) == base + 1
+
+
+def test_ceremonial_dagger_uses_real_sell_value():
+    from balatro_cli.engine.hooks import HOOK_SETTING_BLIND
+    g = _game()
+    dagger = g.add_joker("j_ceremonial")
+    victim = g.add_joker("j_joker")         # cost 2 -> sell value 1
+    expected = 2 * g.sell_value(victim)
+    eff = g.eval_hook(dagger, HOOK_SETTING_BLIND)
+    g.consume_effects(eff)                  # the slice lands via the effect
+    assert victim not in g.jokers
+    assert dagger.ability["mult"] == expected
+
+
+def test_extra_mult_chip_mod_subfields_apply():
+    from types import SimpleNamespace
+    from balatro_cli.engine import scoring
+    eff = Effect(extra={"mult_mod": 4, "chip_mod": 30})
+    chips, mult = scoring._apply(eff, 100, 5, SimpleNamespace(dollars=0, money=0))
+    assert (chips, mult) == (130, 9)
+
+
+def test_held_red_seal_rerolls_joker_individual():
+    from balatro_cli.engine.scoring import score_play
+    g = _game()
+    g.add_joker("j_baron")                  # held Kings: x1.5 (individual)
+    played = [Card("3", "S")]
+    for held, expected in (([Card("K", "S")], 1),
+                           ([Card("K", "S", seal="red")], 2)):
+        res = score_play(played, held, g._resolved_level(played, held),
+                         g.the_blind, jokers=g.jokers, run=g, rng=g.rng)
+        held_log = [_e for tag, _e in res.effects_log if tag == "held"]
+        assert len(held_log) == expected
+
+
+def test_scoring_destruction_fires_remove_playing_cards():
+    g = _game()
+    g.add_joker("j_glass")                  # grows per shattered Glass card
+    glass = Card("5", "S", enhancement="m_glass")
+    g.hand[:] = [glass, Card("5", "H")]     # a pair so both cards score
+    g.select_blind("small")
+    orig = g.rng.chance
+    g.rng.chance = lambda key, denom, **kw: True if key == "glass" else orig(key, denom, **kw)
+    r = g.play_cards([0, 1])
+    assert r["ok"] and glass in r["destroyed"]
+    assert g.jokers[0].ability["x_mult"] > 1    # the batched hook landed
+
+
+def test_cryptid_raises_deck_limit():
+    from balatro_cli.engine import consumables
+    g = _game()
+    base_limit, base_hand = g.params["deck_limit"], len(g.hand)
+    res = consumables._cryptid(g, "c_cryptid", "Tarot", "Cryptid",
+                               {"extra": 2}, [Card("A", "S")])
+    assert res["ok"]
+    assert len(g.hand) == base_hand + 2         # copies join the hand (card.lua:1207)
+    assert g.params["deck_limit"] == base_limit + 2     # card.lua:1210
+
+
+def test_shop_illusion_editions_stamp_playing_cards():
+    g = _game()
+    g.playing_card_rate = 1000          # the playing-card slot always wins
+    s = Shop(g)
+    stamped = enhanced = 0
+    for _ in range(200):
+        kind, _key, _name, _cost, card = s._gen_slot(g.pools, g.rng)
+        if kind != "playing_card":
+            continue
+        stamped += bool(getattr(card, "edition", None))
+        enhanced += bool(getattr(card, "enhancement", None))
+    assert stamped == 0 and enhanced == 0           # no Illusion -> no polls
+
+    g.used_vouchers.add("v_illusion")
+    stamped = enhanced = 0
+    for _ in range(200):
+        kind, _key, _name, _cost, card = s._gen_slot(g.pools, g.rng)
+        if kind != "playing_card":
+            continue
+        stamped += bool(getattr(card, "edition", None))
+        enhanced += bool(getattr(card, "enhancement", None))
+    assert enhanced > 0                             # >0.6 opens the Enhanced pool
+    assert stamped > 0                              # >0.8 stamps an edition
+
+
+def test_tag_redemption_writes_transcript_log():
+    g = _game()
+    g.tags.append("tag_skip")
+    res = g.skip_blind(0)
+    assert res["ok"]
+    assert g.tag_log
+    assert all(line.startswith("tag redeemed") for line in g.tag_log)

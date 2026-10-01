@@ -342,22 +342,14 @@ def score_play(played: list[Card], held: list[Card], level: dict,
                 delta.x_mult *= eff.x_mult or 1.0
         result.card_deltas.append(delta)
 
-    # 7. held cards
+    # 7. held cards - every repetition re-evaluates the card's own held
+    # effect and every joker's individual effect (fresh random rolls), as in
+    # the Lua per-card eval loop (state_events.lua held branch).
     for card in held:
         if card.debuffed:
             continue
-        effects = _card_held_effects(card)
-        for j in joker_list:
-            eff = _joker_calc(run, j, ctx.with_(event=HOOK_INDIVIDUAL,
-                                                cardarea=AREA_HAND,
-                                                other_card=card))
-            if eff is not None:
-                effects.append(eff)
-                result.effects_log.append(("held", eff))
-        if not effects:
-            continue
         reps = 1
-        if card.seal == "red" and effects:
+        if card.seal == "red":
             reps += 1
         for j in joker_list:
             eff = _joker_calc(run, j, ctx.with_(event=HOOK_REPETITION,
@@ -366,6 +358,14 @@ def score_play(played: list[Card], held: list[Card], level: dict,
             if eff and eff.repetitions:
                 reps += int(eff.repetitions)
         for _rep in range(reps):
+            effects = _card_held_effects(card)
+            for j in joker_list:
+                eff = _joker_calc(run, j, ctx.with_(event=HOOK_INDIVIDUAL,
+                                                    cardarea=AREA_HAND,
+                                                    other_card=card))
+                if eff is not None:
+                    effects.append(eff)
+                    result.effects_log.append(("held", eff))
             for eff in effects:
                 before_mult = mult
                 chips, mult = _apply_held(eff, chips, mult, result)
@@ -424,6 +424,7 @@ def score_play(played: list[Card], held: list[Card], level: dict,
             odds = card.ability.get("extra", 4) or 4
             if rng.chance("glass", odds):
                 destroy = True
+                card.shattered = True   # Glass Joker only counts shatters
         if destroy:
             destroyed.append(card)
     result.destroyed = destroyed
@@ -456,6 +457,12 @@ def _apply(eff: Effect, chips: float, mult: float, result: ScoreResult):
     if eff.dollars:
         result.dollars += int(eff.dollars)
         result.money += int(eff.dollars)
+    # "any extra effects" (state_events.lua:735-745): mult/chip mods land
+    # before the swap, same relative order as the Lua.
+    if eff.extra.get("mult_mod"):
+        mult = mod_mult(mult + eff.extra["mult_mod"])
+    if eff.extra.get("chip_mod"):
+        chips = mod_chips(chips + eff.extra["chip_mod"])
     if eff.extra.get("swap"):
         mult, chips = chips, mult
     if eff.x_mult and eff.x_mult != 1.0:

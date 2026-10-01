@@ -127,6 +127,7 @@ class Cli:
             else:
                 self.out(f"  ? phase {state.phase}")
                 break
+            self._flush_tag_log(state)
         state.check_run_end(self.args.ante_cap)
         self._print_end(state)
         return 0 if state.won_run else 1
@@ -147,6 +148,14 @@ class Cli:
     def _print_hand(self, state):
         self.out(f"  {T.status(state)}")
         self.out(f"  {T.hand_line(state, self.glyphs)}")
+
+    def _flush_tag_log(self, state) -> None:
+        """Print (and drain) what redeemed tags did since the last command."""
+        log = getattr(state, "tag_log", None)
+        if log:
+            for line in log:
+                self.out(f"  {line}")
+            log.clear()
 
     def _print_round_end(self, state):
         res = state.end_round()
@@ -182,6 +191,7 @@ class Cli:
                 raise
             except Exception as exc:   # keep the transcript alive on bad input
                 self.out(f"  ! {type(exc).__name__}: {exc}")
+            self._flush_tag_log(state)
             if state.phase in ("round_lost", "game_over"):
                 state.check_run_end(self.args.ante_cap)
         self._print_end(state)
@@ -388,7 +398,10 @@ class Cli:
         if key == "r":
             r = self.shop.reroll()
             if r["ok"]:
-                self.out(f"  reroll ${r['cost']} -> ${r['remaining']}")
+                if r["cost"]:
+                    self.out(f"  reroll ${r['cost']} -> ${r['remaining']}")
+                else:
+                    self.out(f"  reroll (free) -> ${r['remaining']}")
             else:
                 self.out(f"  {r['error']}")
         elif key == "c":

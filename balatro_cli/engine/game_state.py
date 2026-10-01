@@ -93,6 +93,9 @@ class GameState:
         self.stake = stake
 
         self.params = dict(config.STARTING_PARAMS)
+        # G.deck card area limit (game.lua:2251); Cryptid/DNA/Marble Joker add
+        # to it when they put a card in the deck (card.lua:1210/2595/3506)
+        self.params.setdefault("deck_limit", 52)
         # -- G.GAME.modifiers / round_resets / current_round ------------------
         self.modifiers: dict = {}
         # stake modifiers (game.lua:2048-2057)
@@ -167,6 +170,9 @@ class GameState:
         self.consumeables: list[JokerCard] = []
         self.vouchers: list[str] = []
         self.tags: list[str] = []
+        # transcript lines for redeemed tags (filled by apply_tags, drained
+        # by the CLI so each redemption shows what it did)
+        self.tag_log: list[str] = []
 
         no_faces = deck_key == "b_abandoned"
         self.deck: list[Card] = build_standard_deck(no_faces)
@@ -573,6 +579,11 @@ class GameState:
         for c in result.destroyed:
             self._destroy_card(c)
         self.played.extend(c for c in played if c not in result.destroyed)
+        # one batched hook with the whole list (state_events.lua:974-976)
+        if result.destroyed:
+            self.eval_hooks(HOOK_REMOVE_PLAYING_CARDS,
+                            other_card=result.destroyed[-1],
+                            extra={"removed": list(result.destroyed)})
 
         self._draw_to_handsize(after_action=True)
         self._refresh_debuffs()
@@ -760,11 +771,19 @@ class GameState:
         return {"ok": True, "sold": card, "price": price, "remaining": self.dollars}
 
     def sell_value(self, card) -> int:
-        """`Card:set_cost` / `sell_card`: half the cost + extra_value, min $1."""
+        """`Card:set_cost` (card.lua:369-382): base cost + edition extra_cost;
+        sell = max(1, floor(cost/2)) + ability.extra_value."""
         cost = int(getattr(card, "ability", {}).get("cost", 0) or 0)
         if not cost:
             center = loader.centers().get(getattr(card, "key", "")) or {}
             cost = int(center.get("cost", 0) or 0)
+        edition = getattr(card, "edition", None)
+        if edition == "e_foil":
+            cost += 2
+        elif edition == "e_holo":
+            cost += 3
+        elif edition in ("e_polychrome", "e_negative"):
+            cost += 5
         extra = int((getattr(card, "ability", {}) or {}).get("extra_value", 0) or 0)
         return max(1, cost // 2 + extra)
 
@@ -905,6 +924,7 @@ class GameState:
                     copy.edition = getattr(target, "edition", None)
                     copy.seal = target.seal
                     self._add_playing_card(copy)
+                    self.params["deck_limit"] += 1     # card.lua:3506
                     out.append(copy)
                 elif target is not None:               # consumable/joker copy
                     key = getattr(target, "key", target)
@@ -938,6 +958,7 @@ class GameState:
                             self.rng.pick("marble", ["Spades", "Hearts", "Clubs", "Diamonds"]))
                 card.enhancement = "m_stone"
                 self._add_playing_card(card)
+                self.params["deck_limit"] += 1         # card.lua:2595
                 out.append(card)
             elif kind == "playing_card":
                 card = self.create_card("Base", edition=spec.get("edition"),
@@ -1178,7 +1199,10 @@ class GameState:
             return self.rng.pick("tag" + str(ante), pool)
 
     def apply_tags(self, event: str, **kw) -> int:
-        """Fire held tags whose config.type matches `event`; returns $ gained."""
+        """Fire held tags whose config.type matches `event`; returns $ gained.
+
+        Every redemption appends a line to ``self.tag_log`` for the transcript.
+        """
         try:
             from . import tags as tags_mod
             results = tags_mod.apply_tags(self, event, **kw)
@@ -1188,8 +1212,15 @@ class GameState:
         for res in results or []:
             if isinstance(res, dict):
                 total += int(res.get("dollars", 0) or 0)
-                if res.get("message"):
-                    self.message = res["message"]
+                line = f"tag redeemed: {self.tag_name(res.get('key', ''))}"
+                if res.get("dollars"):
+                    line += f" (+${res['dollars']})"
+                msg = res.get("message")
+                if msg and msg not in line:
+                    line += f" - {msg}"
+                self.tag_log.append(line)
+                if msg:
+                    self.message = msg
             elif isinstance(res, Effect):
                 total += int(res.dollars or 0)
         self.dollars += total

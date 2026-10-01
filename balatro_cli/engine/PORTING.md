@@ -94,6 +94,9 @@ API. `GameState` implements exactly this.
 | `run.bosses_used` / `run.boss_reroll_limit` / `run.boss_reroll_cost` / `run.boss_reroll_count` | boss selection + Director's Cut |
 | `run.used_jokers` | every joker key ever owned (pool dedup, `get_current_pool`) |
 | `run.joker_rate` / `run.playing_card_rate` | shop slot weights (20 / 0 by default); `tarot_rate`/`planet_rate` are multipliers over base 4 |
+| `run.tag_log` | transcript lines appended per redeemed tag (drained by the CLI) |
+
+`params["deck_limit"]` mirrors `G.deck.config.card_limit` (game.lua:2251): starts at 52 and is bumped by Cryptid (card.lua:1210), DNA copies (3506) and Marble Joker stone cards (2595). `sell_value()` implements `Card:set_cost` fully: base cost + edition extra_cost (foil 2 / holo 3 / poly & negative 5, card.lua:372-373), sell = `max(1, floor(cost/2)) + extra_value`; the joker/consumable effect tables route Ceremonial Dagger, Swashbuckler and Temperance through it.
 
 ### Additional hook events fired by the engine
 
@@ -127,6 +130,7 @@ API. `GameState` implements exactly this.
 | `buying_card` / `selling_card` / `selling_self` | — | `other_card` |
 | `use_consumeable` | — | `consumable` |
 | `card_added` / `card_removed` / `playing_card_added` / `remove_playing_cards` / `destroying_card` | — | `other_card` |
+| `remove_playing_cards` (batch) | — | `extra["removed"]` = the full destroyed list, fired once after scoring destruction (state_events.lua:974-976); Glass shatters carry `shattered=True` for Glass Joker |
 | `round_start` / `blind_defeated` | — | |
 
 ## Source map
@@ -162,7 +166,7 @@ API. `GameState` implements exactly this.
 | `saved` | `saved` | Mr. Bones / Luchador |
 | `debuff` | `debuff` | Cerulean Bell etc. |
 | `disabled_blind` | `disabled_blind` | Chicot |
-| `extra` | `extra` | free-form side data |
+| `extra` | `extra` | free-form side data; in card-scoring `_apply` the `mult_mod`/`chip_mod`/`swap` sub-fields are consumed like the Lua (state_events.lua:735-745) |
 
 `JokerCard.ability` is the mutable per-joker state table (Lua `self.ability`).
 It is seeded from `centers.json[key]["config"]` and then freely mutated:

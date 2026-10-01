@@ -674,10 +674,7 @@ def _score_branches(run, joker, ctx: Context):
         for other in _jokers(run):
             if other is joker:
                 continue
-            sc = getattr(other, "sell_cost", None)
-            if not isinstance(sc, (int, float)):
-                sc = _sell_cost(other)
-            m += int(sc or 0)
+            m += _sell_cost(run, other)
         if m > 0:
             _ability(joker)["mult"] = m
             return _eff(mult=m)
@@ -1349,14 +1346,18 @@ def _setting_blind(run, joker, ctx: Context):
         if me >= 0 and me + 1 < len(jokers):
             victim = jokers[me + 1]
             ab = _ability(joker)
-            ab["mult"] = ab.get("mult", 0) + 2 * _sell_cost(victim)
+            ab["mult"] = ab.get("mult", 0) + 2 * _sell_cost(run, victim)
             return _eff(destroy=True, extra={"destroy_joker": victim})
     elif name == "Marble Joker":
         return _eff(create=[{"kind": "stone_card", "count": 1}])
     return None
 
 
-def _sell_cost(card) -> int:
+def _sell_cost(run, card) -> int:
+    """Card:set_cost sell_cost (card.lua:382) - the run's canonical value."""
+    sell = getattr(run, "sell_value", None)
+    if callable(sell):
+        return int(sell(card))
     v = getattr(card, "sell_cost", None)
     if isinstance(v, (int, float)):
         return int(v)

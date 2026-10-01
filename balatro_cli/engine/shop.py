@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from .. import config
 from ..data import loader
 from . import packs
+from .card import Card
 from . import consumable as _legacy_consumable  # noqa: F401  (compat import)
 
 RARITY_P = [("common", 1, 0.70), ("uncommon", 2, 0.25), ("rare", 3, 0.04), ("legendary", 4, 0.01)]
@@ -140,6 +141,7 @@ class Shop:
         match the rest of the game.
         """
         state = self.state
+        illusion = "v_illusion" in state.used_vouchers
         rates = [("Joker", float(getattr(state, "joker_rate", 20) or 0)),
                  ("Tarot", 4.0 * float(getattr(state, "tarot_rate", 1) or 1)),
                  ("Planet", 4.0 * float(getattr(state, "planet_rate", 1) or 1)),
@@ -147,6 +149,9 @@ class Shop:
                  ("Spectral", float(getattr(state, "spectral_rate", 0) or 0))]
         total = sum(w for _, w in rates) or 1.0
         roll = rng.rand("cdt" + str(state.ante)) * total
+        # UI_definitions.lua:772 - the Illusion poll is evaluated eagerly when
+        # the slot table is built, before the pool roll is matched.
+        enhanced_pool = illusion and rng.rand("illusion") > 0.6
         acc = 0.0
         type_ = "Joker"
         for name, weight in rates:
@@ -154,7 +159,20 @@ class Shop:
             if acc >= roll > acc - weight:
                 type_ = name
                 break
+        if type_ == "Base" and enhanced_pool:
+            type_ = "Enhanced"
         card = packs.create_card(state, type_, key_append="sho")
+        # UI_definitions.lua:786-792 - Illusion can stamp an edition on a
+        # shop playing card: 20% chance, then poly >0.85 / holo >0.5 / foil.
+        if illusion and type_ in ("Base", "Enhanced") and isinstance(card, Card):
+            if rng.rand("illusion") > 0.8:
+                poll = rng.rand("illusion")
+                if poll > 0.85:
+                    card.edition = "e_polychrome"
+                elif poll > 0.5:
+                    card.edition = "e_holo"
+                else:
+                    card.edition = "e_foil"
         set_ = getattr(card, "set", None) or type_
         if set_ == "Joker":
             kind = "joker"
