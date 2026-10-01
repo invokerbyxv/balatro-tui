@@ -3,6 +3,7 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import Header, Footer, DataTable, Static
 
+from ..game_engine.run import hand_name
 from ..utils.collection_data import get_hand_levels, get_vouchers
 
 
@@ -17,7 +18,8 @@ class HandLevelTable(Horizontal):
         yield DataTable(id="hand_level_right")
 
     def on_mount(self) -> None:
-        rows = get_hand_levels({k: v.get("level", 1) for k, v in self.levels.items()}) if self.levels else get_hand_levels()
+        levels = {k: v.get("level", 1) for k, v in self.levels.items()} if self.levels else {}
+        rows = get_hand_levels(levels)
         mid = (len(rows) + 1) // 2
         for side, chunk in (
             ("hand_level_left", rows[:mid]),
@@ -31,6 +33,10 @@ class HandLevelTable(Horizontal):
 
 class Voucher(Vertical):
 
+    def __init__(self, owned=None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.owned = owned
+
     def compose(self) -> ComposeResult:
         for index in range(2):
             yield Horizontal(
@@ -43,13 +49,39 @@ class Voucher(Vertical):
             )
 
     def on_mount(self) -> None:
-        rows = get_vouchers()
+        rows = get_vouchers(owned=list(self.owned or []))
+        if not rows:
+            rows = [{"name": "尚未持有优惠券", "desc": "", "rarity": "", "price": ""}]
         slots = list(self.query(".voucher_slot"))
         for slot in slots:
             index = int(slot.id.split("_")[1])
             cells = list(slot.query(Static))
-            for cell, row in zip(cells, rows[index:8 + index]):
+            chunk = rows[index:8 + index]
+            for cell, row in zip(cells, chunk):
+                tip = row.get("desc", "")
                 cell.update(row["name"])
+                cell.tooltip = tip
+            for cell in cells[len(chunk):]:
+                cell.update("")
+
+
+class RunStats(Static):
+    """战绩统计行。"""
+
+    def __init__(self, run=None, **kwargs) -> None:
+        super().__init__("", **kwargs)
+        self.run = run
+
+    def on_mount(self) -> None:
+        if self.run is None:
+            self.update("")
+            return
+        most = self.run.most_played
+        self.update(
+            f"跳过 {self.run.skips} · 累计出牌 {self.run.hands_played_total}"
+            f" · 累计剩余弃牌 {self.run.unused_discards}"
+            f" · 最常用牌型 {hand_name(most)}"
+        )
 
 
 class GameInfoScreen(Screen):
@@ -63,9 +95,9 @@ class GameInfoScreen(Screen):
         ("v", "voucher", "优惠券"),
     ]
 
-    def __init__(self, game_state=None, *children, **kwargs):
+    def __init__(self, run_state=None, *children, **kwargs):
         self.mode = "hand"  # "hand" / "voucher",默认牌型
-        self.game_state = game_state
+        self.run_state = run_state
         super().__init__(*children, **kwargs)
 
     def action_quit(self):
@@ -76,9 +108,11 @@ class GameInfoScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        levels = getattr(self.game_state, "hand_levels", None) or {}
+        levels = self.run_state.hand_levels if self.run_state else {}
+        yield RunStats(self.run_state, id="run_stats")
         yield HandLevelTable(levels, id="hand_panel")
-        yield Voucher(id="voucher_panel")
+        owned = self.run_state.vouchers if self.run_state else None
+        yield Voucher(owned=owned, id="voucher_panel")
         yield Footer()
 
     def on_mount(self) -> None:

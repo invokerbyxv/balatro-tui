@@ -2,61 +2,81 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal, VerticalGroup
 from textual.widgets import Button, Header, Footer, Static
 
-from .common import GameLayout, GameScreen, PreparationButton, RightRow1, Tag
+from ..game_engine import carrier_label
+from .common import (
+    GameLayout,
+    GameScreen,
+    PreparationButton,
+    RightRow1,
+    Tag,
+)
+
+_ROW_ZH = {
+    "blind": "盲注奖励",
+    "hands": "剩余出牌",
+    "discards": "剩余弃牌",
+    "tags": "标签奖励",
+    "interest": "利息",
+    "gold": "金币牌",
+}
+
+
+def _row_label(key: str) -> str:
+    if key.startswith("joker:"):
+        jk = key.split(":", 1)[1]
+        try:
+            return f"小丑 {carrier_label_by_key(jk)['name']}"
+        except Exception:
+            return "小丑奖励"
+    return _ROW_ZH.get(key, key)
+
+
+def carrier_label_by_key(key: str) -> dict:
+    from ..utils.collection_data import joker_item
+    return joker_item(key)
 
 
 class SettlementPanel(VerticalGroup):
 
-    def __init__(self, state, collected, failed, **kwargs):
+    def __init__(self, mode, result=None, **kwargs):
         super().__init__(**kwargs)
-        self.state = state
-        self.collected = collected        # 本次结算的金钱 dict
-        self.failed = failed
+        self.mode = mode              # "cash_out" | "won" | "lost"
+        self.result = result or {}
 
     def compose(self) -> ComposeResult:
-        if self.failed:
+        if self.mode == "lost":
             yield Static("未达成目标", id="cash_out")
-            yield Static("本局失败 · 没有金钱奖励", classes="fail_text")
+            yield Static("本局失败 · 没有金钱奖励", classes="fail_text", markup=False)
         else:
-            yield Static(f"提现: ${self.collected['total']}", id="cash_out")
-            yield Horizontal(
-                Static(f"盲注奖励: ${self.collected['blind_reward']}", id="blind_reward"),
-                Static(f"剩余出牌: ${self.collected['hands_money']}", id="hands_money"),
-                id="settlement_row_1",
-            )
-            yield Static(f"利息: ${self.collected['interest']}", id="settlement_interest")
+            total = self.result.get("total", 0)
+            title = "通关胜利!" if self.mode == "won" else f"提现: ${total}"
+            yield Static(title, id="cash_out", markup=False)
+            rows = self.result.get("rows") or []
+            for key, amount in rows:
+                yield Horizontal(
+                    Static(_row_label(key), classes="row_label"),
+                    Static(f"${amount}", classes="row_amount"),
+                    classes="settlement_row",
+                )
         yield Static("· " * 16, id="settlement_divider")
-        label = "返回首页" if self.failed else "收下"
+        label = {"lost": "返回首页", "won": "继续(无尽模式)"}.get(self.mode, "收下")
         yield PreparationButton(label, id="collect")
-
-
-class SettlementArea(VerticalGroup):
-
-    def __init__(self, state, collected, failed, **kwargs):
-        super().__init__(**kwargs)
-        self.state = state
-        self.collected = collected
-        self.failed = failed
-
-    def compose(self) -> ComposeResult:
-        yield SettlementPanel(self.state, self.collected, self.failed)
 
 
 class RightRow2Sub(Horizontal):
 
-    def __init__(self, state, collected, failed, **kwargs):
+    def __init__(self, mode, result=None, **kwargs):
         super().__init__(**kwargs)
-        self.state = state
-        self.collected = collected
-        self.failed = failed
+        self.mode = mode
+        self.result = result
 
     def compose(self) -> ComposeResult:
-        yield SettlementPanel(self.state, self.collected, self.failed)
+        yield SettlementPanel(self.mode, self.result)
         yield Tag()
 
 
 class SettlementScreen(GameScreen):
-    """结算场景:胜利展示提现金额,失败返回首页。"""
+    """结算场景:提现明细 / ante 8 通关胜利(可无尽) / 失败回首页。"""
 
     CSS_PATH = ["../css/common.tcss", "../css/settlement.tcss"]
     BINDINGS = [
@@ -66,29 +86,41 @@ class SettlementScreen(GameScreen):
 
     initial_focus_id = "collect"
 
-    def __init__(self, game_state=None) -> None:
-        super().__init__()
-        self.game_state = game_state
-        self.failed = bool(game_state) and not game_state.won_blind
-        self.collected = game_state.collect_money() if (game_state and not self.failed) else {
-            "total": 0, "blind_reward": 0, "hands_money": 0, "interest": 0,
-        }
+    def __init__(self, run_state=None) -> None:
+        super().__init__(run_state)
+        run = self.run_state
+        self.mode = "cash_out"
+        self.result: dict = {}
+        if run is not None:
+            if run.phase == "round_won":
+                # end_round 恰好调用一次:发钱、进入商店(或 ante8 通关)
+                self.result = run.end_round()
+                if run.phase == "won":
+                    self.mode = "won"
+            elif run.phase == "round_lost":
+                run.check_run_end()
+                self.mode = "lost"
+            elif run.phase == "won":
+                self.mode = "won"
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield GameLayout(RightRow1(), RightRow2Sub(self.game_state, self.collected, self.failed))
+        yield GameLayout(RightRow1(), RightRow2Sub(self.mode, self.result))
         yield Footer()
 
     def action_collect_btn(self) -> None:
         self._done()
 
     def _done(self) -> None:
-        if self.failed:
+        run = self.run_state
+        if self.mode == "lost":
             from .home import HomeScreen
-            self.app.push_screen(HomeScreen())
-        else:
-            from .shop import ShopScreen
-            self.app.push_screen(ShopScreen(self.game_state))
+            self.app.switch_screen(HomeScreen())
+            return
+        if self.mode == "won":
+            run.continue_endless()
+        from .shop import ShopScreen
+        self.swap_screen(ShopScreen(run))
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "collect":

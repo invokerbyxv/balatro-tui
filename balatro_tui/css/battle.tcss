@@ -55,3 +55,22 @@ HandHorizontalScroll Static.selected {
 HandCard:hover {
     text-style: bold;
 }
+
+#played_area {
+    height: auto;
+    max-height: 8;
+    overflow-y: auto;
+    margin-bottom: 1;
+}
+
+ActionBar Center {
+    width: 12;
+}
+
+#sort_group {
+    width: 12;
+}
+
+ActionBar PreparationButton {
+    width: 100%;
+}

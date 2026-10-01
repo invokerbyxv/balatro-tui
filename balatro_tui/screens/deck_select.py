@@ -62,11 +62,16 @@ def _deck_options() -> list[dict]:
 
 
 def _stake_options() -> list[dict]:
+    """8 个赌注,效果由引擎按 game.lua:2048-2057 生效。"""
     return [
-        {"key": "stake_1", "name": "白色底注", "desc": "标准规则"},
-        {"key": "stake_2", "name": "红色底注", "desc": "小盲不奖励金钱"},
-        {"key": "stake_3", "name": "绿色底注", "desc": "目标分增长更快"},
-        {"key": "stake_4", "name": "黑色底注", "desc": "商店可能出永恒小丑"},
+        {"key": "stake_white", "name": "白注", "desc": "标准规则"},
+        {"key": "stake_red", "name": "红注", "desc": "小盲不奖励金钱"},
+        {"key": "stake_green", "name": "绿注", "desc": "盲注目标分增长更快"},
+        {"key": "stake_black", "name": "黑注", "desc": "更高难度"},
+        {"key": "stake_blue", "name": "蓝注", "desc": "弃牌次数 -1"},
+        {"key": "stake_purple", "name": "紫注", "desc": "盲注目标分增长更快"},
+        {"key": "stake_orange", "name": "橙注", "desc": "更高难度"},
+        {"key": "stake_gold", "name": "金注", "desc": "最高难度"},
     ]
 
 
@@ -163,6 +168,6 @@ class DeckSelectScreen(Screen):
         deck_row = self.query_one("#deck_select", SelectionRow)
         stake_row = self.query_one("#stake_select", SelectionRow)
         deck_entry = deck_row.row[deck_row.index]
-        self.game_state.stake = stake_row.index + 1
-        self.game_state.set_deck(deck_entry["key"])
+        self.game_state.start_run(deck_entry["key"], stake=stake_row.index + 1)
+        self.app.run_state = self.game_state     # 注册到应用,供后续屏幕/存档使用
         self.app.push_screen(PreparationScreen(self.game_state))

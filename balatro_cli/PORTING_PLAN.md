@@ -98,3 +98,10 @@ tags.py 的 25 个 handler 全部就位，问题全在触发侧与结算侧。
 - tags.py：25 个 tag handler 齐（问题在触发链）。
 - backs.py：16 个 deck apply 参数面完整，Plasma final_scoring_step 已接入。
 - scoring.py 主流程、enhancement/seal/edition 数值、hand.py 牌型判定、config 起始参数与 HAND_LEVELS、get_blind_amount 三张表：与 Lua 一致。
+
+## 2026-10-01 追加修复（balatro_tui 重构时发现）
+
+- [x] **Checkered Deck 牌组张数**：back.lua:239-251 是把梅花→黑桃、方片→红桃
+  （牌组保持 52 张：26 黑桃 + 26 红桃）；`backs._deck_for` 原来只建 26 张
+  （S/H 各 13）。已修复为每点数 4 张独立 Card 对象（S,H,S,H）。此前无测试覆盖，
+  balatro_tui/tests/test_run_state.py 新增回归（52 张、26/26 分布）。

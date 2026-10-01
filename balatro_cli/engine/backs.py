@@ -252,9 +252,12 @@ def _add_consumable(run, key: str) -> bool:
 
 
 def _deck_for(run, name: str, cfg: dict, notes: list[str]) -> list[Card] | None:
-    if name == "Checkered Deck":                            # back.lua:239
-        deck = [Card(rank, suit) for rank in RANKS for suit in ("S", "H")]
-        notes.append(f"deck: {len(deck)} cards (Spades + Hearts only)")
+    if name == "Checkered Deck":                            # back.lua:239-251
+        # Lua converts Clubs->Spades / Diamonds->Hearts on the full deck,
+        # keeping all 52 cards (26 Spades + 26 Hearts); four distinct Card
+        # objects per rank (S,H,S,H)
+        deck = [Card(rank, suit) for rank in RANKS for suit in ("S", "H", "S", "H")]
+        notes.append(f"deck: {len(deck)} cards (Clubs->Spades, Diamonds->Hearts)")
         return deck
     if cfg.get("remove_faces") or name == "Abandoned Deck":  # back.lua:202
         deck = build_standard_deck(no_faces=True)

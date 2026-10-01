@@ -2,6 +2,7 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal, VerticalGroup
 from textual.widgets import Button, Header, Footer, Static
 
+from ..game_engine import card_label, carrier_label
 from .common import (
     FocusableStatic,
     GameLayout,
@@ -10,39 +11,44 @@ from .common import (
     RightRow1,
 )
 
-from ..utils.lua_data import load_definitions, get_config
-from ..utils.loc_text import loc_name
-from ..utils.collection_data import joker_vars, tarot_vars, planet_vars, spectral_vars, _desc, RARITY_ZH
-
-PACK_TITLES = {
-    "buffoon": "小丑包",
-    "arcana": "秘法包",
-    "celestial": "星球包",
-    "spectral": "妖法包",
+PACK_KIND_ZH = {
+    "Buffoon": "小丑包",
+    "Arcana": "秘法包",
+    "Celestial": "星球包",
+    "Spectral": "妖法包",
+    "Standard": "标准包",
 }
+
+
+def _card_info(card) -> tuple[str, str]:
+    """包内一张卡 → (显示文本, tooltip)。"""
+    if getattr(card, "is_joker", False) or not hasattr(card, "enhancement"):
+        # 小丑/消耗品(JokerCard)
+        info = carrier_label(card)
+        return info["label"], info["desc"]
+    text, _color = card_label(card)
+    if card.enhancement:
+        from ..utils.loc_text import loc_name
+        text += f"({loc_name('Enhanced', card.enhancement)})"
+    return text, "扑克牌(选走会加入牌组)"
 
 
 class PackChoice(FocusableStatic):
 
-    def __init__(self, kind: str, item: dict, **kwargs) -> None:
-        super().__init__(item["label"], **kwargs)
-        self.kind = kind
-        self.item = item
-        self.tooltip = item.get("desc") or ""
+    def __init__(self, index: int, card, **kwargs) -> None:
+        label, tip = _card_info(card)
+        super().__init__(label, **kwargs)
+        self.index = index
+        self.card = card
+        self.tooltip = tip
 
     def on_click(self, event) -> None:
-        self.screen.select(self)
+        self.screen.toggle(self.index)
+        event.stop()
 
 
 class PackCards(Horizontal):
-
-    def __init__(self, options, **kwargs):
-        super().__init__(**kwargs)
-        self.options = options
-
-    def compose(self) -> ComposeResult:
-        for i, (kind, item) in enumerate(self.options, start=1):
-            yield PackChoice(kind, item, id=f"pack_card_{i}")
+    pass
 
 
 class PackBar(Horizontal):
@@ -54,30 +60,30 @@ class PackBar(Horizontal):
 
 class BoostersArea(VerticalGroup):
 
-    def __init__(self, title, options, **kwargs):
+    def __init__(self, title, choose, **kwargs):
         super().__init__(**kwargs)
         self.title = title
-        self.options = options
+        self.choose = choose
 
     def compose(self) -> ComposeResult:
-        yield Static(self.title, id="pack_name")
-        yield PackCards(self.options)
+        yield Static(f"{self.title} · 可选 {self.choose} 张", id="pack_name")
+        yield PackCards()
         yield PackBar()
 
 
 class RightRow2Sub(Horizontal):
 
-    def __init__(self, title, options, **kwargs):
+    def __init__(self, title, choose, **kwargs):
         super().__init__(**kwargs)
         self.title = title
-        self.options = options
+        self.choose = choose
 
     def compose(self) -> ComposeResult:
-        yield BoostersArea(self.title, self.options)
+        yield BoostersArea(self.title, self.choose)
 
 
 class BoostersScreen(GameScreen):
-    """补充包选择场景(支持普通/妖法包与 variable extra/choose)。"""
+    """补充包场景:支持 choose>1(多次取走直至选满)与跳过。"""
 
     CSS_PATH = ["../css/common.tcss", "../css/boosters.tcss"]
 
@@ -87,102 +93,81 @@ class BoostersScreen(GameScreen):
         *GameScreen.BINDINGS,
     ]
 
-    def __init__(self, game_state=None, pack=None) -> None:
-        super().__init__()
-        self.game_state = game_state
+    def __init__(self, run_state=None, pack: dict | None = None) -> None:
+        super().__init__(run_state)
         self.pack = pack or {}
-        self.pack_key = (self.pack.get("kind") or "buffoon").lower()
-        self.extra = self.pack.get("extra") or 2
-        self.choose = self.pack.get("choose") or 1
-        self.selected_index = 0
-        self.options = self._make_options()
+        self.selected: set[int] = set()   # 待取走的下标
+        self._uid = 0
 
-    def _make_options(self) -> list:
-        import random
-        defs = load_definitions()
-        pool = list((defs.get(self._set_name()) or {}).keys())
-        picks = random.sample(pool, min(self.extra, len(pool)))
-        kind = "joker" if self.pack_key == "buffoon" else self.pack_key
-        return [(kind, _item(self.pack_key, k)) for k in picks]
+    # ------------------------------------------------------------- 展示
 
-    def _set_name(self) -> str:
-        return {
-            "buffoon": "Joker",
-            "arcana": "Tarot",
-            "celestial": "Planet",
-            "spectral": "Spectral",
-        }.get(self.pack_key, "Joker")
+    @property
+    def remaining_choices(self) -> int:
+        choose = self.pack.get("choose", 1)
+        return choose - len(self.pack.get("taken", [])) - len(self.selected)
 
     def compose(self) -> ComposeResult:
-        title = PACK_TITLES.get(self.pack_key, "补充包")
+        kind = self.pack.get("kind", "Buffoon")
+        title = PACK_KIND_ZH.get(kind, self.pack.get("name") or "补充包")
         yield Header()
-        yield GameLayout(RightRow1(), RightRow2Sub(f"{title} 选择 {self.choose}", self.options))
+        yield GameLayout(RightRow1(), RightRow2Sub(title, self.pack.get("choose", 1)))
         yield Footer()
 
     async def on_mount(self):
         await self.refresh_run_ui()
+        self._rebuild_cards()
         self._sync_selection()
 
-    def select(self, widget) -> None:
-        self.selected_index = int(widget.id.rsplit("_", 1)[1]) - 1
+    def _rebuild_cards(self) -> None:
+        row = self.query_one(PackCards)
+        row.remove_children()
+        for i, card in enumerate(self.pack.get("cards", [])):
+            self._uid += 1
+            row.mount(PackChoice(i, card, id=f"pack_card_{self._uid}"))
         self._sync_selection()
+
+    def _widgets(self) -> list[PackChoice]:
+        return list(self.query(PackChoice))
 
     def _sync_selection(self) -> None:
-        for i in range(1, self.extra + 1):
-            try:
-                card = self.query_one(f"#pack_card_{i}", PackChoice)
-                card.set_class(self.selected_index == i - 1, "selected")
-            except Exception:
-                return
+        for w in self._widgets():
+            w.set_class(w.index in self.selected, "selected")
+
+    # ------------------------------------------------------------- 交互
+
+    def toggle(self, index: int) -> None:
+        if index in self.selected:
+            self.selected.discard(index)
+        elif self.remaining_choices > 0:
+            self.selected.add(index)
+        self._sync_selection()
 
     def action_focus_prev_card(self):
-        self.selected_index = 0
-        self._sync_selection()
-        self.query_one("#pack_card_1", PackChoice).focus()
+        widgets = self._widgets()
+        if widgets:
+            widgets[0].focus()
 
     def action_focus_next_card(self):
-        self.selected_index = self.extra - 1
-        self._sync_selection()
-        self.query_one(f"#pack_card_{self.extra}", PackChoice).focus()
+        widgets = self._widgets()
+        if widgets:
+            widgets[-1].focus()
 
-    def _apply(self) -> None:
-        kind, item = self.options[self.selected_index]
-        if kind == "joker":
-            self.game_state.jokers.append(item)
-        else:
-            self.game_state.consumables.setdefault(kind + "s", []).append(item)
-        self.app.pop_screen()
+    def _take(self) -> None:
+        if not self.selected:
+            return
+        result = self.run_state.take_from_pack(self.pack, sorted(self.selected))
+        self.selected = set()
+        if not result.get("ok"):
+            return
+        if self.pack.get("closed") or not self.pack.get("cards"):
+            self.app.pop_screen()
+            return
+        self._rebuild_cards()
+        self.run_worker(self.refresh_run_ui())
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "pack_select":
-            self._apply()
+            self._take()
         elif event.button.id == "pack_skip":
+            self.run_state.skip_pack(self.pack)
             self.app.pop_screen()
-
-
-def _item(pack_key: str, k: str) -> dict:
-    from ..utils.collection_data import joker_item
-    if pack_key == "buffoon":
-        return joker_item(k)
-    return _consumable_from_key(pack_key, k)
-
-
-def _consumable_from_key(set_name: str, k: str) -> dict:
-    set_name_map = {"arcana": "Tarot", "celestial": "Planet", "spectral": "Spectral"}
-    set_full = set_name_map.get(set_name, set_name)
-    defs = load_definitions()
-    c = (defs.get(set_full) or {}).get(k) or {}
-    cfg = get_config(c)
-    name = loc_name(set_full, k)
-    if set_full == "Tarot":
-        vars_ = tarot_vars(k, cfg)
-    elif set_full == "Planet":
-        vars_ = planet_vars(cfg, defs.get("_hands") or {})
-    else:
-        vars_ = spectral_vars(k, cfg)
-    return {
-        "key": k,
-        "label": f"[{name}]",
-        "desc": _desc(set_full, k, vars_),
-        "cost": c.get("cost") or 1,
-    }

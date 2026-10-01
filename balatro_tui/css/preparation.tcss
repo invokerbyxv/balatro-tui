@@ -13,3 +13,32 @@ Boss Static {
 Blind Horizontal Static {
     width: 50%;
 }
+
+/* 盲注卡自适应内容高度:防止按钮溢出到边框行导致点击失效 */
+OfferRow {
+    height: auto;
+    max-height: 100%;
+}
+
+Blind {
+    height: auto;
+    max-height: 100%;
+}
+
+Blind VerticalGroup {
+    height: auto;
+}
+
+Blind Center {
+    height: 1;
+}
+
+#prep_side {
+    width: 24;
+    padding: 0 1;
+}
+
+#notice {
+    height: auto;
+    margin-bottom: 1;
+}

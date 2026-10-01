@@ -1,15 +1,19 @@
-"""Shared widgets for the in-run scenes (blind choice, battle, shop, settlement, boosters)."""
+"""Shared widgets for the in-run scenes (blind choice, battle, shop, settlement, boosters).
+
+对局界面全部经由 RunState 适配层读取 balatro_cli.engine。
+"""
 
 from __future__ import annotations
 
 from textual import events
 from textual.app import ComposeResult
-from textual.containers import Center, Container, Horizontal, HorizontalScroll, VerticalGroup, VerticalScroll
+from textual.containers import Container, Grid, Horizontal, HorizontalScroll, VerticalGroup, VerticalScroll
 from textual.css.query import NoMatches
-from textual.screen import Screen
+from textual.screen import Screen, ModalScreen
 from textual.widget import Widget
 from textual.widgets import Button, DataTable, Static
 
+from ..game_engine import carrier_label
 from ..utils.helpers import format_number
 
 
@@ -69,13 +73,15 @@ class ScrollInteraction:
         event.stop()
 
 
-def _state(screen: Screen):
-    return getattr(screen, "game_state", None)
+def run_of(screen: Screen):
+    return getattr(screen, "run_state", None)
 
 
 class LeftContent(VerticalGroup):
 
     def compose(self) -> ComposeResult:
+        run = run_of(self.screen)
+        blind = run.the_blind if run else None
         yield Horizontal(
             Static("小盲注", id="level"),
             Static("目标: 300", id="require"),
@@ -91,19 +97,19 @@ class LeftContent(VerticalGroup):
             Static("0", id="mult"),
             id="calculation"
         )
+        yield Static("", id="blind_effect")
         tb_1 = DataTable(id="left_content_tb_1")
         tb_1.add_column("出牌", key="plays")
         tb_1.add_column("弃牌", key="discards")
         tb_1.add_column("底注", key="ante")
         tb_1.add_column("回合", key="round")
         tb_1.add_column("钱", key="money")
-        # 起始行取当前对局真实数值(如黄牌起始 $14),避免首帧残留硬编码 $4
-        st = _state(self.screen)
+        st = run
         tb_1.add_row(
             st.hands_left if st else 0,
             st.discards_left if st else 0,
             f"1/{st.ante if st else 8}",
-            1,
+            st.round_num if st else 1,
             f"${st.dollars if st else 4}",
         )
         tb_1.cursor_type = "none"
@@ -117,38 +123,47 @@ class LeftContent(VerticalGroup):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "info":
             from .game_info import GameInfoScreen
-            self.app.push_screen(GameInfoScreen(_state(self.screen)))
+            self.app.push_screen(GameInfoScreen(run_of(self.screen)))
             event.stop()
 
     async def refresh_run(self, state=None) -> None:
-        state = state or _state(self.screen)
-        if state is None:
+        run = state or run_of(self.screen)
+        if run is None:
             return
-        blind = state.current_blind
-        level = blind.name if blind else f"底注 {state.ante}"
-        self.query_one("#level", Static).update(level)
-        require = f"目标: {format_number(state.blind_target)}" if blind else "目标: --"
-        self.query_one("#require", Static).update(require)
-        reward = f"奖励: ${blind.dollars}" if blind else "奖励: $0"
-        self.query_one("#rewards", Static).update(reward)
-        self.query_one("#score", Static).update(f"得分: {format_number(state.score_chips)}")
-        calc = state.last_calc
+        blind = run.the_blind
+        if blind is not None:
+            from ..game_engine import blind_display
+            info = blind_display(blind.key, blind.chips, blind.dollars)
+            self.query_one("#level", Static).update(info["name"])
+            self.query_one("#require", Static).update(f"目标: {format_number(info['chips'])}")
+            self.query_one("#rewards", Static).update(f"奖励: ${info['dollars']}")
+            effect = info.get("desc") or ""
+            self.query_one("#blind_effect", Static).update(
+                f"效果: {effect}" if blind.is_boss and effect else ""
+            )
+        else:
+            self.query_one("#level", Static).update(f"底注 {run.ante}")
+            self.query_one("#require", Static).update("目标: --")
+            self.query_one("#rewards", Static).update("奖励: $0")
+            self.query_one("#blind_effect", Static).update("")
+        self.query_one("#score", Static).update(f"得分: {format_number(run.chips)}")
+        # 上一手的实时结算(适配器缓存 ScoreResult 汇总)
+        calc = getattr(run, "last_score_display", None)
         if calc:
-            self.query_one("#chips", Static).update(f"{format_number(calc['chips'])}")
-            self.query_one("#mult", Static).update(f"× {format_number(calc['mult'])}")
+            self.query_one("#chips", Static).update(f"{format_number(calc[0])}")
+            self.query_one("#mult", Static).update(f"× {format_number(calc[1])}")
         else:
             self.query_one("#chips", Static).update("0")
             self.query_one("#mult", Static).update("0")
-        hands = state.hands_left if hasattr(state, "hands_left") else 0
-        discards = state.discards_left if hasattr(state, "discards_left") else 0
         tbl = self.query_one("#left_content_tb_1", DataTable)
         if tbl.row_count:
-            tbl.update_cell_at((0, 0), hands)
-            tbl.update_cell_at((0, 1), discards)
-            tbl.update_cell_at((0, 3), f"<{state.ante}/{8}>")
-            tbl.update_cell_at((0, 4), f"${state.dollars}")
+            tbl.update_cell_at((0, 0), run.hands_left)
+            tbl.update_cell_at((0, 1), run.discards_left)
+            tbl.update_cell_at((0, 2), f"{run.ante}/{8}")
+            tbl.update_cell_at((0, 3), run.round_num)
+            tbl.update_cell_at((0, 4), f"${run.dollars}")
         self.query_one("#card_deck", Static).update(
-            f"[{len(state.deck)}]/[{52}]"
+            f"[{len(run.deck)}]/[{run.state.starting_deck_size}]"
         )
 
 
@@ -161,6 +176,7 @@ class LeftContainer(Container):
 class JokerHorizontalScroll(
     ScrollInteraction, FocusNavigationScroll, HorizontalMouseScroll, HorizontalScroll
 ):
+    """持有小丑条:显示中文名,点击弹出出售确认。"""
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -172,12 +188,14 @@ class JokerHorizontalScroll(
         yield from self._children()
 
     def _children(self):
-        state = _state(self.screen)
-        jokers = state.jokers if state else []
-        for i, joker in enumerate(jokers, start=1):
+        run = run_of(self.screen)
+        jokers = run.jokers if run else []
+        for i, joker in enumerate(jokers):
             self._n += 1
-            item = FocusableStatic(joker.get("label") or "[小丑]", id=f"joker_{self._n}")
-            item.tooltip = joker.get("desc") or "小丑牌"
+            info = carrier_label(joker)
+            item = FocusableStatic(info["label"], id=f"joker_{self._n}")
+            item.tooltip = f"{info['desc']}\n点击出售(得 ${run.state.sell_value(joker)})"
+            item.index = i
             yield item
 
     async def _rebuild(self) -> None:
@@ -189,10 +207,19 @@ class JokerHorizontalScroll(
     async def refresh_run(self, state=None) -> None:
         await self._rebuild()
 
+    def on_click(self, event: events.Click) -> None:
+        widget = event.widget
+        if isinstance(widget, FocusableStatic) and widget.id and widget.id.startswith("joker_"):
+            screen = self.screen
+            if hasattr(screen, "open_sell"):
+                screen.open_sell("joker", widget.index)
+                event.stop()
+
 
 class ConsumableHorizontalScroll(
     ScrollInteraction, FocusNavigationScroll, HorizontalMouseScroll, HorizontalScroll
 ):
+    """消耗品条:显示真名,点击进入使用流程(由所在屏实现 use_consumable_flow)。"""
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -204,17 +231,14 @@ class ConsumableHorizontalScroll(
         yield from self._children()
 
     def _children(self):
-        state = _state(self.screen)
-        items = []
-        if state:
-            for t in ("tarots", "planets", "spectrals"):
-                items.extend((t, x) for x in state.consumables.get(t, []))
-        for i, (t, item) in enumerate(items, start=1):
-            title = {"tarots": "塔罗", "planets": "星球", "spectrals": "幻灵"}.get(t, "消耗品")
+        run = run_of(self.screen)
+        items = run.consumeables if run else []
+        for i, card in enumerate(items):
             self._n += 1
-            fs = FocusableStatic(f"[{title}]", id=f"consumable_{self._n}")
-            if isinstance(item, dict):
-                fs.tooltip = item.get("desc") or "消耗品"
+            info = carrier_label(card)
+            fs = FocusableStatic(info["label"], id=f"consumable_{self._n}")
+            fs.tooltip = info["desc"]
+            fs.index = i
             yield fs
 
     async def _rebuild(self) -> None:
@@ -225,6 +249,14 @@ class ConsumableHorizontalScroll(
 
     async def refresh_run(self, state=None) -> None:
         await self._rebuild()
+
+    def on_click(self, event: events.Click) -> None:
+        widget = event.widget
+        if isinstance(widget, FocusableStatic) and widget.id and widget.id.startswith("consumable_"):
+            screen = self.screen
+            if hasattr(screen, "use_consumable_flow"):
+                screen.use_consumable_flow(widget.index)
+                event.stop()
 
 
 class RightRow1Sub(Horizontal):
@@ -243,6 +275,7 @@ class RightRow1(Container):
 
 
 class Tag(ScrollInteraction, FocusNavigationScroll, VerticalScroll):
+    """待用标签条:显示真实标签名,悬停看效果。触发由引擎在对应时机自动完成。"""
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -254,9 +287,8 @@ class Tag(ScrollInteraction, FocusNavigationScroll, VerticalScroll):
         yield from self._children()
 
     def _children(self):
-        """渲染当局待用标签(state.tags);队列为空时给出占位。"""
-        state = _state(self.screen)
-        tags = getattr(state, "tags", None)
+        run = run_of(self.screen)
+        tags = run.tags if run else []
         if not tags:
             yield FocusableStatic("[无标签]", id="tag_empty")
             return
@@ -289,6 +321,44 @@ class GameLayout(Horizontal):
         super().__init__(LeftContainer(), RightContainer(*right_children))
 
 
+class SellDialog(ModalScreen):
+    """出售确认:展示名称与可得金额。"""
+
+    CSS = """
+    SellDialog {
+        align: center middle;
+    }
+    #sell_box {
+        width: 60;
+        height: auto;
+        border: round $primary;
+        background: $surface;
+        padding: 1 2;
+    }
+    #sell_buttons { height: auto; align-horizontal: center; }
+    """
+
+    BINDINGS = [("escape", "cancel", "取消")]
+
+    def __init__(self, kind: str, index: int, name: str, price: int, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.kind = kind
+        self.index = index
+        self.name = name
+        self.price = price
+
+    def compose(self) -> ComposeResult:
+        with Grid(id="sell_box"):
+            yield Static(f"出售 {self.name} ?")
+            yield Static(f"可得 ${self.price}")
+            with Horizontal(id="sell_buttons"):
+                yield PreparationButton("确认出售", id="sell_ok")
+                yield PreparationButton("取消", id="sell_cancel")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        self.dismiss(event.button.id == "sell_ok")
+
+
 class GameScreen(Screen):
     """Common bindings and directional focus navigation for the run scenes."""
 
@@ -303,55 +373,83 @@ class GameScreen(Screen):
 
     initial_focus_id = "info"
 
+    def __init__(self, run_state=None, *children, **kwargs) -> None:
+        super().__init__(*children, **kwargs)
+        self.run_state = run_state
+
     def action_quit(self):
         self.app.exit()
 
     def action_go_back(self):
         self.app.pop_screen()
 
+    def swap_screen(self, screen) -> None:
+        """流程前进:弹出当前屏再推入新屏,避免屏幕栈随回合无限增长。"""
+        self.app.pop_screen()
+        self.app.push_screen(screen)
+
+    def open_sell(self, kind: str, index: int) -> None:
+        """点击小丑/消耗品弹出售确认;确认后真正卖掉。"""
+        run = self.run_state
+        if run is None:
+            return
+        if kind == "joker":
+            cards = run.jokers
+        else:
+            cards = run.consumeables
+        if not 0 <= index < len(cards):
+            return
+        card = cards[index]
+        info = carrier_label(card)
+        price = run.state.sell_value(card)
+
+        def _do(sold: bool) -> None:
+            if not sold:
+                return
+            if kind == "joker":
+                run.sell_joker(index)
+            else:
+                run.sell_consumable(index)
+            self.run_worker(self.refresh_run_ui())
+
+        self.app.push_screen(SellDialog(kind, index, info["name"], price), _do)
+
     async def refresh_run_ui(self) -> None:
-        """刷新左侧信息栏与小丑/消耗品条。"""
-        for cls, method in (
-            (LeftContent, "refresh_run"),
-            (JokerHorizontalScroll, "refresh_run"),
-            (ConsumableHorizontalScroll, "refresh_run"),
-            (Tag, "refresh_run"),
-        ):
+        """刷新左侧信息栏与小丑/消耗品/标签条。"""
+        for cls in (LeftContent, JokerHorizontalScroll, ConsumableHorizontalScroll, Tag):
             for widget in self.query(cls):
                 try:
-                    await getattr(widget, method)()
+                    await widget.refresh_run()
                 except NoMatches:
                     pass
         self._refresh_counts()
 
     def _refresh_counts(self) -> None:
-        state = _state(self)
-        if state is None:
+        run = run_of(self)
+        if run is None:
             return
-        for widget in self.query(JokerHorizontalScroll):
-            self.refresh_joker_count()
-        for widget in self.query(ConsumableHorizontalScroll):
-            self.refresh_consumable_count()
+        self.refresh_joker_count()
+        self.refresh_consumable_count()
 
     def refresh_joker_count(self) -> None:
-        state = _state(self)
-        if state is None:
+        run = run_of(self)
+        if run is None:
             return
-        n = len(state.jokers)
-        cap = state.params.get("joker_slots", 5)
         try:
-            self.query_one("#joker_count", Static).update(f"[{n}/{cap}]")
+            self.query_one("#joker_count", Static).update(
+                f"[{len(run.jokers)}/{run.joker_slots}]"
+            )
         except NoMatches:
             pass
 
     def refresh_consumable_count(self) -> None:
-        state = _state(self)
-        if state is None:
+        run = run_of(self)
+        if run is None:
             return
-        n = sum(len(state.consumables.get(t, [])) for t in ("tarots", "planets", "spectrals"))
-        cap = state.params.get("consumables", 2)
         try:
-            self.query_one("#consumable_count", Static).update(f"[{n}/{cap}]")
+            self.query_one("#consumable_count", Static).update(
+                f"[{len(run.consumeables)}/{run.consumable_slots}]"
+            )
         except NoMatches:
             pass
 

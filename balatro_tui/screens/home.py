@@ -4,7 +4,7 @@ from textual.widgets import Header, Footer, Button
 from textual.screen import Screen
 
 from .deck_select import DeckSelectScreen
-from ..game_engine.state import GameState
+from ..game_engine import RunState
 from .collection import CollectionScreen
 
 class HomeScreen(Screen):
@@ -51,7 +51,7 @@ class HomeScreen(Screen):
         self.query_one(f"#{ids[idx]}", Button).focus()
 
     def action_start_game(self):
-        self.app.push_screen(DeckSelectScreen(GameState()))
+        self.app.push_screen(DeckSelectScreen(RunState()))
 
     def action_open_collection(self):
         self.app.push_screen(CollectionScreen())
@@ -60,6 +60,6 @@ class HomeScreen(Screen):
         if event.button.id == "exit_btn":
             self.app.exit()
         elif event.button.id == "start_btn":
-            self.app.push_screen(DeckSelectScreen(GameState()))
+            self.app.push_screen(DeckSelectScreen(RunState()))
         elif event.button.id == "collection_btn":
             self.app.push_screen(CollectionScreen())

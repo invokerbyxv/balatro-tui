@@ -1,94 +1,77 @@
 from textual.app import ComposeResult
-from textual.containers import Horizontal, VerticalGroup, HorizontalGroup
+from textual.containers import Horizontal, VerticalGroup
 from textual.widgets import Button, Header, Footer, Static
 
+from ..game_engine import card_label, carrier_label
 from .common import (
     FocusableStatic,
     GameLayout,
     GameScreen,
     PreparationButton,
-    RightRow1, Tag,
+    RightRow1,
+    Tag,
 )
 
-# 卡包 kind -> 本地化名(含妖法包)
 PACK_KIND_ZH = {
-    "buffoon": "小丑包",
-    "arcana": "秘法包",
-    "celestial": "星球包",
-    "spectral": "妖法包",
+    "Buffoon": "小丑包",
+    "Arcana": "秘法包",
+    "Celestial": "星球包",
+    "Spectral": "妖法包",
+    "Standard": "标准包",
 }
 
-# 小丑栏单格类型标记(消耗牌前缀,便于区分)
-_ITEM_MARK = {
-    "joker": "",
-    "tarot": "◆",
-    "planet": "☄",
-    "spectral": "妖",
-}
+KIND_MARK = {"consumable": "◆", "playing_card": "🂠", "booster": "包", "voucher": "券"}
 
 
-class ShopItem(FocusableStatic):
-    """小丑栏的一件在售商品(小丑或消耗牌)。"""
+def _item_label(item) -> tuple[str, str]:
+    """ShopItem → (显示文本, tooltip)。"""
+    if item.kind in ("joker", "consumable"):
+        info = carrier_label(item.card)
+        return f"${item.cost} {info['label']}", info["desc"]
+    if item.kind == "playing_card":
+        text, color = card_label(item.card)
+        return f"${item.cost} {text}", "一张打牌强化过的扑克牌"
+    if item.kind == "booster":
+        name = PACK_KIND_ZH.get(item.name, item.name)
+        cfg = item.data.get("config") or {}
+        extra, choose = cfg.get("extra"), cfg.get("choose")
+        return f"${item.cost} [{name}]", f"打开{name}:含 {extra} 张,可选 {choose} 张"
+    if item.kind == "voucher":
+        from ..utils.loc_text import loc_name
+        from ..utils.collection_data import voucher_vars
+        from ..utils.lua_data import get_config, load_definitions
+        from ..utils.collection_data import _desc
+        name = loc_name("Voucher", item.key) or item.name
+        c = (load_definitions().get("Voucher") or {}).get(item.key) or {}
+        desc = _desc("Voucher", item.key, voucher_vars(get_config(c)))
+        return f"${item.cost} [券:{name}]", desc
+    return f"${item.cost} ?", ""
 
-    def __init__(self, index: int, item: dict, **kwargs) -> None:
-        kind = item.get("kind", "joker")
-        mark = _ITEM_MARK.get(kind, "")
-        label = f"${item['cost']} {mark}{item['label']}" if mark else f"${item['cost']} {item['label']}"
+
+class ShopGoodsItem(FocusableStatic):
+    """一件在售商品(小丑/消耗牌/扑克牌/卡包/优惠券)。"""
+
+    def __init__(self, index: int, item, **kwargs) -> None:
+        label, tip = _item_label(item)
         super().__init__(label, **kwargs)
         self.index = index
-        self.kind = kind
-        self.tooltip = item.get("desc") or "小丑牌"
+        self.tooltip = tip or "商品"
 
     def on_click(self, event) -> None:
-        self.screen.run_worker(self.screen.buy_joker(self.index))
-        event.stop()
-
-
-class PackItem(FocusableStatic):
-
-    def __init__(self, pack_index: int, pack: dict, **kwargs) -> None:
-        name = PACK_KIND_ZH.get(pack.get("kind"), pack.get("name") or "补充包")
-        super().__init__(f"${pack['cost']} [{name}]", **kwargs)
-        self.pack_index = pack_index
-        self.pack = pack
-        self.tooltip = f"打开{name},选择{name}内容"
-
-    def on_click(self, event) -> None:
-        self.screen.run_worker(self.screen.buy_pack(self.pack_index))
-        event.stop()
-
-
-class VoucherItem(FocusableStatic):
-
-    def __init__(self, voucher: dict, **kwargs) -> None:
-        super().__init__(f"${voucher['cost']} [{voucher['name']}]", **kwargs)
-        self.voucher = voucher
-        self.tooltip = f"购买优惠券 {voucher['name']}"
-
-    def on_click(self, event) -> None:
-        self.screen.run_worker(self.screen.buy_voucher())
+        self.screen.run_worker(self.screen.buy(self.index))
         event.stop()
 
 
 class GoodsRow(Horizontal):
-
-    def compose(self) -> ComposeResult:
-        # 商品在 on_mount 时由 ShopGoods._rebuild 填充
-        yield from ()
+    """卡牌位(小丑/消耗牌/扑克牌)。"""
 
 
 class PackRow(Horizontal):
-
-    def compose(self) -> ComposeResult:
-        # 卡包在 on_mount 时由 ShopGoods._rebuild 填充
-        yield from ()
+    """卡包位。"""
 
 
 class VoucherRow(Horizontal):
-
-    def compose(self) -> ComposeResult:
-        # 优惠券在 on_mount 时由 ShopGoods._rebuild 填充
-        yield from ()
+    """优惠券位。"""
 
 
 class ShopGoods(VerticalGroup):
@@ -101,22 +84,28 @@ class ShopGoods(VerticalGroup):
     def _rebuild(self):
         """购买/重掷后重建三行商品(用单调 id 避免重建冲突)。"""
         self._uid = getattr(self, "_uid", 0)
+        items = self.screen.run_state.shop_items()
         goods = self.query_one(GoodsRow)
         goods.remove_children()
-        for index, item in enumerate(self.screen.game_state.shop_jokers):
+        for item in items:
+            if item.kind == "booster":
+                continue
             self._uid += 1
-            goods.mount(ShopItem(index, item, id=f"shop_item_{self._uid}"))
+            goods.mount(ShopGoodsItem(item.index, item, id=f"shop_item_{self._uid}"))
         packs = self.query_one(PackRow)
         packs.remove_children()
-        for index, pack in enumerate(self.screen.game_state.shop_packs):
+        for item in items:
+            if item.kind != "booster":
+                continue
             self._uid += 1
-            packs.mount(PackItem(index, pack, id=f"pack_{self._uid}"))
+            packs.mount(ShopGoodsItem(item.index, item, id=f"pack_{self._uid}"))
         vouchers = self.query_one(VoucherRow)
         vouchers.remove_children()
-        voucher = self.screen.game_state.shop_voucher
-        if voucher:
+        for item in items:
+            if item.kind != "voucher":
+                continue
             self._uid += 1
-            vouchers.mount(VoucherItem(voucher, id=f"voucher_{self._uid}"))
+            vouchers.mount(ShopGoodsItem(item.index, item, id=f"voucher_{self._uid}"))
 
 
 class ShopPanel(Horizontal):
@@ -138,15 +127,14 @@ class RightRow2Sub(Horizontal):
 
 
 class ShopScreen(GameScreen):
-    """商店场景:买小丑/消耗牌、买卡包、买优惠券、重掷、下一回合。"""
+    """商店场景:买小丑/消耗牌/卡包/优惠券、重掷、卖卡、下一回合。"""
 
     CSS_PATH = ["../css/common.tcss", "../css/shop.tcss"]
 
     BINDINGS = [*GameScreen.BINDINGS]
 
-    def __init__(self, game_state=None) -> None:
-        super().__init__()
-        self.game_state = game_state
+    def __init__(self, run_state=None) -> None:
+        super().__init__(run_state)
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -154,8 +142,6 @@ class ShopScreen(GameScreen):
         yield Footer()
 
     async def on_mount(self) -> None:
-        if not getattr(self.game_state, "shop_jokers", None):
-            self.game_state.generate_shop()
         await self.refresh_run_ui()
         self.query_one(ShopGoods)._rebuild()
         self._sync_reroll_label()
@@ -166,37 +152,49 @@ class ShopScreen(GameScreen):
 
     def _sync_reroll_label(self) -> None:
         try:
-            self.query_one("#reroll", PreparationButton).label = f"重掷 ${self.game_state.reroll_cost}"
+            self.query_one("#reroll", PreparationButton).label = f"重掷 ${self.run_state.reroll_cost}"
         except Exception:
             pass
 
-    async def buy_joker(self, index: int) -> None:
-        if self.game_state.buy_joker(index):
-            self.query_one(ShopGoods)._rebuild()
-            await self.refresh_run_ui()
+    def _notice(self, text: str) -> None:
+        self.query_one("#next_round", PreparationButton).tooltip = text
 
-    async def buy_pack(self, index: int) -> None:
-        pack = self.game_state.buy_pack(index)
-        if not pack:
+    async def buy(self, index: int) -> None:
+        result = self.run_state.buy(index)
+        if not result.get("ok"):
             return
+        pack = result.get("pack")
+        if pack:
+            from .boosters import BoostersScreen
+            self.app.push_screen(BoostersScreen(self.run_state, pack=pack))
+        self.query_one(ShopGoods)._rebuild()
         await self.refresh_run_ui()
-        from .boosters import BoostersScreen
-        self.app.push_screen(BoostersScreen(self.game_state, pack=pack))
-
-    async def buy_voucher(self) -> None:
-        if self.game_state.buy_voucher():
-            self.query_one(ShopGoods)._rebuild()
-            await self.refresh_run_ui()
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         bid = event.button.id
         if bid == "next_round":
-            self.game_state.advance_ante_blind()
-            self.game_state.generate_shop()
+            self.run_state.advance_from_shop()
             from .preparation import PreparationScreen
-            self.app.push_screen(PreparationScreen(self.game_state))
+            self.swap_screen(PreparationScreen(self.run_state))
         elif bid == "reroll":
-            if self.game_state.reroll_shop():
+            result = self.run_state.reroll()
+            if result.get("ok"):
                 self.query_one(ShopGoods)._rebuild()
                 self._sync_reroll_label()
                 await self.refresh_run_ui()
+
+    def use_consumable_flow(self, index: int) -> None:
+        """商店里使用不需要目标的消耗品(星球升级等)。"""
+        run = self.run_state
+        rng = run.consumable_target_range(run.consumeables[index])
+        if rng is not None:
+            self._notice("该消耗品需要手牌目标,请在战斗中使用")
+            return
+        from ..game_engine import carrier_label
+        name = carrier_label(run.consumeables[index])["name"]
+        result = run.use_consumable(index, [])
+        if result.get("ok"):
+            self._notice(f"使用了 {name}")
+            self.run_worker(self.refresh_run_ui())
+        else:
+            self._notice(f"无法使用 {name}: {result.get('error', '')}")
