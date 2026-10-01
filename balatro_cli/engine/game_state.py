@@ -271,12 +271,14 @@ class GameState:
         bd = loader.blinds()
         offers: list[BlindOffer] = []
         if self.blind_index == 3:
-            offers.append(_boss_offer(self, bd))
+            offers.append(self._ante_boss_offer(bd))
         elif self.blind_index == 2:
             offers.append(_make_offer(self, "big", "bl_big", bd["bl_big"]))
+            offers.append(self._ante_boss_offer(bd))
         else:
             offers.append(_make_offer(self, "small", "bl_small", bd["bl_small"]))
             offers.append(_make_offer(self, "big", "bl_big", bd["bl_big"]))
+            offers.append(self._ante_boss_offer(bd))
         # a Boss Tag / Standard Tag may add extra choices
         for extra in getattr(self, "_extra_blind_choices", []) or []:
             offers.append(extra)
@@ -288,6 +290,20 @@ class GameState:
         self.apply_tags("new_blind_choice")
         self._consume_pending_tags()
         return offers
+
+    def _ante_boss_offer(self, bd) -> BlindOffer:
+        """This ante's boss offer, drawn once per ante and cached.
+
+        The boss is previewed from the first blind select (game.lua shows all
+        three); the cache keeps the previewed key stable across skips and
+        prevents extra RNG draws / bosses_used counts.
+        """
+        cached = getattr(self, "_boss_offer_cache", None)
+        if cached is not None and cached[0] == self.ante:
+            return cached[1]
+        offer = _boss_offer(self, bd)
+        self._boss_offer_cache = (self.ante, offer)
+        return offer
 
     def _consume_pending_tags(self) -> None:
         """Land what the pack/boss tags queued (free packs, boss reroll)."""
@@ -304,7 +320,9 @@ class GameState:
             if self.blind_choices and self.blind_choices[-1].kind == "boss":
                 self.blind_choices.pop()
             bd = loader.blinds()
-            self.blind_choices.append(_boss_offer(self, bd))
+            offer = _boss_offer(self, bd)
+            self.blind_choices.append(offer)
+            self._boss_offer_cache = (self.ante, offer)
 
     def select_blind(self, choice) -> None:
         """choice: BlindOffer.kind ('small'/'big'/'boss'), a key, or an index."""
@@ -315,6 +333,8 @@ class GameState:
                 offer = self.blind_choices[int(choice)]
             except (ValueError, IndexError, TypeError):
                 offer = self.blind_choices[0]
+        if offer.kind == "boss" and self.blind_index != 3:
+            offer = self.blind_choices[0]   # boss is preview-only until its turn
         self._start_blind(offer)
 
     def skip_blind(self, index: int = 0) -> dict:
@@ -348,6 +368,14 @@ class GameState:
         except Exception:
             return ""
 
+    def peek_skip_tag(self, blind_kind: str = "small") -> str:
+        """Tag key the next skip of `blind_kind` would grant (UI preview)."""
+        try:
+            from . import tags as tags_mod
+            return tags_mod.peek_tag(self, self.ante, blind_kind)
+        except Exception:
+            return ""
+
     # -- boss blind reroll (Director's Cut / Retcon, button_callbacks.lua:2786)
     def boss_reroll_info(self) -> dict:
         limit = int(getattr(self, "boss_reroll_limit", 0) or 0)
@@ -371,7 +399,9 @@ class GameState:
         self.dollars -= info["cost"]
         self.boss_reroll_count = int(getattr(self, "boss_reroll_count", 0) or 0) + 1
         self.blind_choices = [o for o in self.blind_choices if o.kind != "boss"]
-        self.blind_choices.append(_boss_offer(self, loader.blinds()))
+        offer = _boss_offer(self, loader.blinds())
+        self.blind_choices.append(offer)
+        self._boss_offer_cache = (self.ante, offer)
         return {"ok": True, "cost": info["cost"], "remaining": self.dollars}
 
     def _advance_blind_index(self, offer: BlindOffer) -> None:

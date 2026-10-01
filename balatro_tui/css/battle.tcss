@@ -67,10 +67,16 @@ ActionBar Center {
     width: 12;
 }
 
+/* 组内两枚按钮各占 12 列,组本身必须给足 24 列,否则「花色」被裁剪点不到 */
 #sort_group {
-    width: 12;
+    width: 24;
 }
 
 ActionBar PreparationButton {
     width: 100%;
+}
+
+/* 100% 会让组内两枚按钮各自撑满整组而溢出,用 1fr 平分 */
+#sort_buttons PreparationButton {
+    width: 1fr;
 }

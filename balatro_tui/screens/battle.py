@@ -182,26 +182,26 @@ class BattleScreen(GameScreen):
         if self.run_state.message:
             lines.append(f"· {self.run_state.message}")
         area = self.query_one("#played_area", Static)
-        area.update("\n".join(lines))
         self.run_state.sort_hand(self._sort_mode)
         self._render_hand()
+        # _render_hand 会触发 _update_preview 覆盖该区域,计分行必须在重渲染之后写入
+        area.update("\n".join(lines))
         await self.refresh_run_ui()
         self._resolve()
 
     async def _discard(self) -> None:
         cards = self._selected_cards()
         result = self.run_state.discard_cards(cards)
-        if not result.get("ok"):
-            self.query_one("#played_area", Static).update(
-                f"无法弃牌: {result.get('error', '')}")
-            return
         area = self.query_one("#played_area", Static)
+        if not result.get("ok"):
+            area.update(f"无法弃牌: {result.get('error', '')}")
+            return
         text = f"已弃牌 {len(result['dropped'])} 张"
         if self.run_state.message:
             text += f"\n· {self.run_state.message}"
-        area.update(text)
         self.run_state.sort_hand(self._sort_mode)
         self._render_hand()
+        area.update(text)
         await self.refresh_run_ui()
 
     def _sort(self, mode) -> None:
@@ -233,14 +233,12 @@ class BattleScreen(GameScreen):
         name = carrier_label(run.consumeables[index])["name"]
         result = run.use_consumable(index, targets)
         area = self.query_one("#played_area", Static)
-        if result.get("ok"):
-            area.update(f"使用了 {name}")
-        else:
-            area.update(f"无法使用 {name}: {result.get('error', '')}")
-        self.target_mode = None
-        self.query_one("#confirm_use", PreparationButton).display = False
         self.run_state.sort_hand(self._sort_mode)
         self._render_hand()
+        message = f"使用了 {name}" if result.get("ok") else f"无法使用 {name}: {result.get('error', '')}"
+        area.update(message)
+        self.target_mode = None
+        self.query_one("#confirm_use", PreparationButton).display = False
         await self.refresh_run_ui()
 
     def _confirm_use(self) -> None:

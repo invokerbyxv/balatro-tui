@@ -10,27 +10,43 @@ Boss Static {
     text-align: center;
 }
 
-Blind Horizontal Static {
-    width: 50%;
+/* 名称占满剩余宽度,过关需求/奖励紧随其后,同一行减少高度 */
+Blind .blind_stats {
+    height: auto;
 }
 
-/* 盲注卡自适应内容高度:防止按钮溢出到边框行导致点击失效 */
+Blind .blind_name {
+    width: 1fr;
+}
+
+Blind .blind_chips,
+Blind .blind_reward {
+    width: auto;
+}
+
+/* 三张盲注卡等宽等高,整体高度与右侧标签条一致(同处一个水平行) */
 OfferRow {
-    height: auto;
-    max-height: 100%;
+    width: 1fr;
+    height: 100%;
 }
 
 Blind {
-    height: auto;
-    max-height: 100%;
+    width: 1fr;
+    height: 100%;
 }
 
 Blind VerticalGroup {
-    height: auto;
+    width: 1fr;
+    height: 100%;
 }
 
 Blind Center {
     height: 1;
+}
+
+/* 按钮文字过长时在卡内截断,防止溢出卡片被裁剪导致点击失效 */
+Blind PreparationButton {
+    max-width: 100%;
 }
 
 #prep_side {

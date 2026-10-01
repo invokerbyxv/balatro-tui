@@ -26,7 +26,9 @@ KIND_MARK = {"consumable": "◆", "playing_card": "🂠", "booster": "包", "vou
 def _item_label(item) -> tuple[str, str]:
     """ShopItem → (显示文本, tooltip)。"""
     if item.kind in ("joker", "consumable"):
-        info = carrier_label(item.card)
+        # card 仅在标签塞入免费小丑时才有;常规进货的卡对象在 data 里
+        card = item.card if item.card is not None else item.data
+        info = carrier_label(card)
         return f"${item.cost} {info['label']}", info["desc"]
     if item.kind == "playing_card":
         text, color = card_label(item.card)

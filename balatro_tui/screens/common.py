@@ -344,12 +344,13 @@ class SellDialog(ModalScreen):
         super().__init__(**kwargs)
         self.kind = kind
         self.index = index
-        self.name = name
+        # Screen.name 在 Textual 8 是只读属性,不能占用
+        self.item_name = name
         self.price = price
 
     def compose(self) -> ComposeResult:
         with Grid(id="sell_box"):
-            yield Static(f"出售 {self.name} ?")
+            yield Static(f"出售 {self.item_name} ?")
             yield Static(f"可得 ${self.price}")
             with Horizontal(id="sell_buttons"):
                 yield PreparationButton("确认出售", id="sell_ok")

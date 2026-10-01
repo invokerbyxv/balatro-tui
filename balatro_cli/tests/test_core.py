@@ -183,14 +183,14 @@ def test_run_starts_at_first_ante_select():
     st = GameState("seed1")
     st.start()
     assert st.phase == "blind_select"
-    assert [o.kind for o in st.blind_choices] == ["small", "big"]
+    assert [o.kind for o in st.blind_choices] == ["small", "big", "boss"]
     assert st.ante == 1
 
 
 def test_blind_progression_small_big_boss_ante():
     st = GameState("prog")
     st.start()
-    for expected in (["small", "big"], ["big"], ["boss"]):
+    for expected in (["small", "big", "boss"], ["big", "boss"], ["boss"]):
         assert [o.kind for o in st.blind_choices] == expected
         st.select_blind(st.blind_choices[0].kind)
         st.chips = st.the_blind.chips
@@ -198,7 +198,7 @@ def test_blind_progression_small_big_boss_ante():
         st.end_round()
         st.advance_from_shop()
     assert st.ante == 2
-    assert [o.kind for o in st.blind_choices] == ["small", "big"]
+    assert [o.kind for o in st.blind_choices] == ["small", "big", "boss"]
 
 
 def test_skip_blind_grants_a_tag_and_advances():
@@ -208,7 +208,7 @@ def test_skip_blind_grants_a_tag_and_advances():
     assert res["ok"]
     assert len(st.tags) == 1
     assert st.phase == "blind_select"
-    assert [o.kind for o in st.blind_choices] == ["big"]
+    assert [o.kind for o in st.blind_choices] == ["big", "boss"]
     # skipping cannot loop forever: big -> boss -> ante up
     res = st.skip_blind(0)
     assert res["ok"]
@@ -216,7 +216,38 @@ def test_skip_blind_grants_a_tag_and_advances():
     res = st.skip_blind(0)
     assert res["ok"]
     assert st.ante == 2
-    assert [o.kind for o in st.blind_choices] == ["small", "big"]
+    assert [o.kind for o in st.blind_choices] == ["small", "big", "boss"]
+
+
+def test_peek_skip_tag_matches_actual_draw():
+    """UI 的跳过标签预览必须与真实跳过抽到的标签一致(预览不消耗随机流)。"""
+    for seed in ("peek1", "peek2", "peek3"):
+        st = GameState(seed)
+        st.start()
+        preview = st.peek_skip_tag("small")
+        assert preview, "预览应返回标签键"
+        res = st.skip_blind(0)
+        assert res["tag"] == preview, f"{seed}: 预览 {preview!r} != 实抽 {res['tag']!r}"
+        # 预览不影响后续:再预览大盲并与实抽对比
+        preview_big = st.peek_skip_tag("big")
+        res_big = st.skip_blind(0)
+        assert res_big["tag"] == preview_big
+
+
+def test_boss_previewed_from_first_blind_select():
+    """ante 开局即可看到 BOSS 预览,且每个 ante 只抽一次、跳过后不换人。"""
+    st = GameState("preview-boss")
+    st.start()
+    kinds = [o.kind for o in st.blind_choices]
+    assert kinds == ["small", "big", "boss"]
+    boss_key = st.blind_choices[2].key
+    st.skip_blind(0)                       # 跳过小盲
+    assert [o.kind for o in st.blind_choices] == ["big", "boss"]
+    assert st.blind_choices[1].key == boss_key, "跳过后 BOSS 预览不应换人"
+    # boss 未到回合不可提前开打:select_blind('boss') 回退到当前盲注
+    st.select_blind("boss")
+    assert st.the_blind.is_boss is False
+    assert st.phase == "round"
 
 
 def test_round_money_counts_leftover_hands_and_interest():

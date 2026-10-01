@@ -309,6 +309,15 @@ class RunState:
     def skip_blind(self) -> dict:
         return self.state.skip_blind(0)
 
+    def skip_tag_preview(self, kind: str) -> dict:
+        """跳过该盲注将获得的标签(预览,不消耗随机流)→ 展示数据。"""
+        key = self.state.peek_skip_tag(kind)
+        if not key:
+            return {}
+        from ..utils.collection_data import tag_item
+        item = tag_item(key)
+        return {"key": key, "name": item["label"], "desc": item["desc"]}
+
     def boss_reroll_info(self) -> dict:
         return self.state.boss_reroll_info()
 

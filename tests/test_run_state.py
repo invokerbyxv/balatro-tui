@@ -25,9 +25,11 @@ def test_start_and_blind_choices():
     r = make_run()
     assert r.phase == "blind_select"
     kinds = [o["kind"] for o in r.blind_display_choices()]
-    assert kinds == ["small", "big"]
+    assert kinds == ["small", "big", "boss"]
     names = [o["name"] for o in r.blind_display_choices()]
-    assert names == ["小盲注", "大盲注"]
+    assert names[:2] == ["小盲注", "大盲注"]
+    # 第三张是 BOSS 预览:不可选,但带效果描述
+    assert r.blind_display_choices()[2]["desc"]
 
 
 def test_select_blind_draws_hand():

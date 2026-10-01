@@ -98,7 +98,7 @@ class Cli:
             if state.phase == "blind_select":
                 for i, o in enumerate(state.blind_choices, 1):
                     self.out(f"  {i}:{T.blind_offer(state.ante, o)}")
-                if self.args.auto_skip and len(state.blind_choices) == 2:
+                if self.args.auto_skip and state.blind_choices[0].kind != "boss":
                     res = state.skip_blind(0)
                     self.out(f"  {T.skip_line(res)}")
                 else:

@@ -41,6 +41,7 @@ Never prints, stdlib + :mod:`balatro_cli.data.loader` only.
 from __future__ import annotations
 
 import re
+from types import SimpleNamespace
 
 from ..data import loader
 from .hooks import Context
@@ -262,6 +263,22 @@ def random_tag(run, ante: int, blind_kind: str) -> str:
     if key == "tag_orbital":
         _record_orbital_choice(run, ante, blind_kind)
     return key
+
+
+def peek_tag(run, ante: int, blind_kind: str) -> str:
+    """Preview the tag a skip would grant (UI hint) without touching state.
+
+    Same draw as :func:`random_tag`, but on a cloned RNG against a throwaway
+    shim, so the real stream position and `orbital_choices` stay untouched —
+    the following real `random_tag` call still yields the same key.
+    """
+    rng = _rng(run)
+    shim = SimpleNamespace(
+        banned_keys=getattr(run, "banned_keys", None),
+        rng=rng.copy() if rng is not None else None,
+        hand_levels=getattr(run, "hand_levels", None),
+    )
+    return random_tag(shim, ante, blind_kind)
 
 
 # ---------------------------------------------------------------------------

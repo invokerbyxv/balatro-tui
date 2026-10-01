@@ -8,6 +8,7 @@ from .common import (
     PreparationButton,
     RightRow1,
     Tag,
+    run_of,
 )
 
 
@@ -25,14 +26,24 @@ class Blind(Horizontal):
         children = [
             Center(PreparationButton(mode, classes="blind_select_btn",
                                      disabled=not self.selectable)),
-            Static(info["name"], classes="blind_name", markup=False),
-            Static(f"{info['chips']:,}"),
-            Static(f"${info['dollars']}"),
+            Horizontal(
+                Static(info["name"], classes="blind_name", markup=False),
+                Static(f"{info['chips']:,}", classes="blind_chips"),
+                Static(f"${info['dollars']}", classes="blind_reward"),
+                classes="blind_stats",
+            ),
         ]
-        if info.get("desc"):
+        # 只有 BOSS 有特殊效果;小盲/大盲没有效果行
+        if info.get("kind") == "boss" and info.get("desc"):
             children.append(Static(f"效果: {info['desc']}", classes="blind_effect", markup=False))
         if self.selectable:
-            children.append(Center(PreparationButton("跳过盲注", classes="blind_skip_btn")))
+            btn = PreparationButton("跳过盲注", classes="blind_skip_btn")
+            run = run_of(self.screen)
+            preview = run.skip_tag_preview(info["kind"]) if run else {}
+            if preview:
+                btn.label = f"跳过盲注 得{preview['name']}"
+                btn.tooltip = preview["desc"]
+            children.append(Center(btn))
         yield VerticalGroup(*children)
 
 
@@ -49,16 +60,15 @@ class OfferRow(Horizontal):
 
 
 class RightRow2Sub(Horizontal):
+    """盲注卡片行 + 标签条 + 公告/重掷列,三列同一水平行。"""
 
     def __init__(self, offers):
         super().__init__()
         self.offers = offers
 
     def compose(self) -> ComposeResult:
-        yield VerticalGroup(
-            OfferRow(self.offers),
-            Tag(),
-        )
+        yield OfferRow(self.offers)
+        yield Tag()
         yield VerticalGroup(
             Static("", id="notice", markup=False),
             PreparationButton("", id="reroll_boss"),
