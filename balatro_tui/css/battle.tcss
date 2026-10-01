@@ -80,3 +80,13 @@ ActionBar PreparationButton {
 #sort_buttons PreparationButton {
     width: 1fr;
 }
+
+/* 紧凑模式(≤15 行):去掉提示行外距、手牌区收成卡片的固定高度,
+   保证 13 行下手牌完整可见可点 */
+.compact #played_area {
+    margin-bottom: 0;
+}
+
+.compact HandHorizontalScroll {
+    height: 5;
+}

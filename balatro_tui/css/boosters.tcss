@@ -30,3 +30,13 @@ PackChoice.selected {
     background: rgb(120, 160, 220);
     color: black;
 }
+
+/* 紧凑模式(≤15 行):收卡片行下距,保证【选择/跳过】行渲染在视口内 */
+.compact PackCards {
+    margin-bottom: 1;
+}
+
+/* 覆盖继承到的 75% 高度,卡包场景需要占满剩余高度 */
+RightRow2Sub {
+    height: 1fr;
+}

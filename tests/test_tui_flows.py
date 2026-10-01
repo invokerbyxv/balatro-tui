@@ -746,3 +746,59 @@ def test_full_ante_cycle_three_blinds():
             assert run.blind_choices[0].kind == "small"
 
     _run(main())
+
+
+# ===========================================================================
+# 低高度(13 行)紧凑模式:整条流程的所有交互控件在极小终端下仍可见可点
+# ===========================================================================
+
+def test_compact_13_lines_full_flow():
+    """13 行是支持的最低高度:盲注 → 战斗 → 结算 → 商店 → 卡包,全程鼠标可点。"""
+    async def main():
+        app = BalatroApp()
+        async with app.run_test(size=(100, 13)) as pilot:
+            run = RunState(SEED)
+            run.start_run("b_red", 1)
+            app.run_state = run
+            app.push_screen(PreparationScreen(run))
+            await pause(pilot, 0.3)
+
+            # 盲注选择(紧凑模式应隐藏 Header)
+            assert app.screen.has_class("compact")
+            select_btn = next(b for b in app.screen.query(".blind_select_btn") if not b.disabled)
+            assert await click_when_ready(pilot, select_btn)
+            await pause(pilot, 0.3)
+            battle = app.screen
+            assert isinstance(battle, BattleScreen)
+
+            # 手牌完整可见(3 行卡片 + 边框)
+            hand_card = live_hand_cards(battle, run)[0]
+            assert hand_card.region.height == 3
+
+            # 出牌取胜 → 结算(奖励金额行与【收下】在视口内可点)
+            run.state.the_blind.chips = 1
+            assert await click_when_ready(pilot, hand_card)
+            await pause(pilot, 0.1)
+            assert await click_when_ready(pilot, battle.query_one("#play_hand"))
+            await pause(pilot, 0.5)
+            settlement = app.screen
+            assert isinstance(settlement, SettlementScreen)
+            collect = settlement.query_one("#collect")
+            assert collect.region.y + collect.region.height <= 13
+            assert await click_when_ready(pilot, collect)
+            await pause(pilot, 0.4)
+            assert isinstance(app.screen, ShopScreen)
+
+            # 商店三行商品(商品/卡包/优惠券)都在视口内
+            for sel in ("GoodsRow", "PackRow", "VoucherRow"):
+                for row in app.screen.query(sel):
+                    assert row.region.y + row.region.height <= 13, sel
+            pack = app.screen.query(PackRow).first()
+            assert await click_when_ready(pilot, pack.query(ShopGoodsItem).first())
+            await pause(pilot, 0.4)
+            assert isinstance(app.screen, BoostersScreen)
+            assert await click_when_ready(pilot, app.screen.query_one("#pack_skip"))
+            await pause(pilot, 0.3)
+            assert isinstance(app.screen, ShopScreen)
+
+    _run(main())

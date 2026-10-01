@@ -10,16 +10,17 @@ SettlementPanel {
     text-align: center;
 }
 
-#settlement_row_1, #settlement_row_2 {
+/* compose 用的是 classes="settlement_row/row_label/row_amount",必须用类选择器 */
+.settlement_row {
     height: 1;
     margin-top: 1;
 }
 
-#blind_result, #hands_left {
+.row_label {
     width: 70%;
 }
 
-#blind_reward, #hands_money {
+.row_amount {
     width: 30%;
     text-align: right;
     color: rgb(255, 200, 0);
@@ -34,4 +35,13 @@ SettlementPanel {
     width: 100%;
     margin-top: 1;
     text-align: center;
+}
+
+/* 紧凑模式(≤15 行):奖励行数多时也要保证【收下】在视口内可点 */
+.compact SettlementPanel {
+    padding: 0 2;
+}
+
+.compact .settlement_row {
+    margin-top: 0;
 }

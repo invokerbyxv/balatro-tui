@@ -130,3 +130,21 @@ Tag:hover {
 Tag:focus {
     background: rgb(83, 83, 83) 25%;
 }
+
+/* 小丑/消耗品行只需一行,把剩余空间全部让给场景内容(低高度下关键) */
+RightRow1, RightRow1Sub {
+    height: auto;
+}
+
+JokerHorizontalScroll, ConsumableHorizontalScroll {
+    height: 1;
+}
+
+RightRow2Sub {
+    height: 1fr;
+}
+
+/* 低高度紧凑模式:隐藏标题栏,把空间让给内容 */
+.compact Header {
+    display: none;
+}

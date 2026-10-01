@@ -1,14 +1,17 @@
 from textual.app import ComposeResult
-from textual.containers import Horizontal, VerticalGroup
+from textual.containers import Horizontal, HorizontalScroll, VerticalGroup
 from textual.widgets import Button, Header, Footer, Static
 
 from ..game_engine import card_label, carrier_label
 from .common import (
     FocusableStatic,
+    FocusNavigationScroll,
     GameLayout,
     GameScreen,
+    HorizontalMouseScroll,
     PreparationButton,
     RightRow1,
+    ScrollInteraction,
     Tag,
 )
 
@@ -64,8 +67,8 @@ class ShopGoodsItem(FocusableStatic):
         event.stop()
 
 
-class GoodsRow(Horizontal):
-    """卡牌位(小丑/消耗牌/扑克牌)。"""
+class GoodsRow(ScrollInteraction, FocusNavigationScroll, HorizontalMouseScroll, HorizontalScroll):
+    """卡牌位(小丑/消耗牌/扑克牌);列宽不足时可横向滚动。"""
 
 
 class PackRow(Horizontal):
@@ -134,6 +137,9 @@ class ShopScreen(GameScreen):
     CSS_PATH = ["../css/common.tcss", "../css/shop.tcss"]
 
     BINDINGS = [*GameScreen.BINDINGS]
+
+    # 三行商品需要的高度比其它场景多,提前两行进入紧凑模式
+    COMPACT_HEIGHT = 17
 
     def __init__(self, run_state=None) -> None:
         super().__init__(run_state)

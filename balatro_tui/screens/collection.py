@@ -1,10 +1,11 @@
 from textual.app import ComposeResult
-from textual.containers import HorizontalGroup
+from textual.containers import HorizontalScroll
 from textual.widget import Widget
 from textual.widgets import Header, Footer, DataTable, Button
 from textual.screen import Screen
 
 from ..utils.collection_data import get_rows
+from .common import FocusNavigationScroll, HorizontalMouseScroll, ScrollInteraction
 
 COLLECTIONS = {
     "jokers": "小丑牌",
@@ -58,7 +59,8 @@ class CollectionDetailScreen(Screen):
         table.focus()
 
 
-class CollectionList(HorizontalGroup):
+class CollectionList(ScrollInteraction, FocusNavigationScroll, HorizontalMouseScroll, HorizontalScroll):
+    """分类按钮行;窗口窄放不下 6 个按钮时可横向滚动。"""
 
     def __init__(self, id: str, keys: list[str], *children: Widget,):
         self.keys = keys
@@ -123,6 +125,7 @@ class CollectionScreen(Screen):
                 return
             c = min(c, len(rows[r]) - 1)
         rows[r][c].focus()
+        rows[r][c].scroll_visible(animate=False)
 
     def compose(self) -> ComposeResult:
         all_key = [k for k in COLLECTIONS]

@@ -43,3 +43,13 @@ ShopGoods FocusableStatic {
     border: rgb(83, 83, 83);
     margin: 0 1;
 }
+
+/* 紧凑模式(≤17 行):单行无框商品卡,三行商品完整可见 */
+.compact ShopGoodsItem {
+    height: 1;
+    border: none;
+}
+
+.compact ShopGoods {
+    padding: 0 1;
+}

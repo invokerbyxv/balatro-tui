@@ -374,6 +374,12 @@ class GameScreen(Screen):
 
     initial_focus_id = "info"
 
+    # ≤ 此高度进入紧凑模式:隐藏 Header、收紧留白(商店子类放宽到 17)
+    COMPACT_HEIGHT = 15
+
+    def on_resize(self, event: events.Resize) -> None:
+        self.set_class(event.size.height <= self.COMPACT_HEIGHT, "compact")
+
     def __init__(self, run_state=None, *children, **kwargs) -> None:
         super().__init__(*children, **kwargs)
         self.run_state = run_state
